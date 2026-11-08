@@ -1,0 +1,58 @@
+slam_toolbox:
+  ros__parameters:
+    use_sim_time: true
+
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_link
+    scan_topic: /scan
+
+    # LOCALIZATION mode — load saved map, localize on it, don't rebuild.
+    mode: localization
+    map_file_name: /home/thomas/ros2_ws/src/warehouse_cleaning_robot/maps/slam_map
+    map_start_pose: [0.0, 0.0, 0.0]
+
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
+
+    # --- smoothness: publish TF steadily, correct LESS often ---
+    transform_publish_period: 0.05      # steady 20Hz TF (0.02 was too jumpy)
+    map_update_interval: 2.0
+    resolution: 0.05
+    max_laser_range: 8.0
+    minimum_time_interval: 0.5
+    transform_timeout: 0.3
+    tf_buffer_duration: 30.0
+    stack_size_to_use: 40000000
+
+    # only re-localize after meaningful motion. 0.2 = correct OFTEN so the
+    # estimate tracks the robot tightly and never drifts far (the grid marker,
+    # not SLAM tuning, is what keeps the visual smooth now).
+    minimum_travel_distance: 0.4
+    minimum_travel_heading: 0.3
+    use_scan_matching: true
+    use_scan_barycenter: true
+    scan_buffer_size: 15
+    scan_buffer_maximum_scan_distance: 10.0
+
+    # --- scan-matcher: CORRECT drift (do NOT over-trust odom) ----------------
+    # Earlier these were raised to smooth the staircase, but that let the pose
+    # drift in feature-poor aisles until it diverged in aisle 3. Back to
+    # balanced values so SLAM actually pulls the robot onto the map. The 0.5m
+    # search window stays small so it can never jump to a look-alike aisle.
+    link_match_minimum_response_fine: 0.12   # accept good matches readily
+    correlation_search_space_dimension: 0.3  # small -> no wrong-aisle jumps
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.1
+    distance_variance_penalty: 1.0          # balanced (was 0.9 -> caused drift)
+    angle_variance_penalty: 1.5              # balanced (was 1.3 -> let yaw drift)
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true

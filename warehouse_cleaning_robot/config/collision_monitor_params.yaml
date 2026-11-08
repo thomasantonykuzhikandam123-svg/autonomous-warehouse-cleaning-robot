@@ -1,0 +1,54 @@
+### Nav2 Collision Monitor -- the safety layer that GUARANTEES no collision.
+### It sits below the controller: reads the controller's velocity on
+### /cmd_vel, watches the lidar (+ the forklift obstacle cloud), and if an
+### obstacle enters a zone it slows or stops the robot, then passes the
+### (possibly modified) command out on /cmd_vel_safe to the robot base.
+###
+### Two zones, in front of a 0.6 m-wide cleaner:
+###   SLOWDOWN (warning / "keep clear" rule) -> drop to 30% speed
+###   STOP     (inner emergency zone)         -> halt until clear (yield)
+
+collision_monitor:
+  ros__parameters:
+    use_sim_time: true
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel"          # from the Nav2 controller
+    cmd_vel_out_topic: "cmd_vel_safe"    # to the robot base (remap base to this)
+    state_topic: "collision_monitor_state"
+    transform_tolerance: 0.3
+    source_timeout: 1.0
+    base_shift_correction: true
+    stop_pub_timeout: 2.0
+
+    polygons: ["PolygonSlow", "PolygonStop"]
+
+    # ---- larger forward warning zone: slow to 30% (gentle, human-like) ----
+    PolygonSlow:
+      type: "polygon"
+      points: "[[1.6, 0.7], [1.6, -0.7], [-0.4, -0.7], [-0.4, 0.7]]"
+      action_type: "slowdown"
+      slowdown_ratio: 0.3
+      max_points: 3            # ROS2 Humble: delete this line, use  max_points: 3
+      visualize: true
+      polygon_pub_topic: "polygon_slowdown"
+
+    # ---- inner emergency zone: full stop until the obstacle leaves ----
+    PolygonStop:
+      type: "polygon"
+      points: "[[0.65, 0.45], [0.65, -0.45], [-0.35, -0.45], [-0.35, 0.45]]"
+      action_type: "stop"
+      max_points: 3            # ROS2 Humble: delete this line, use  max_points: 3
+      visualize: true
+      polygon_pub_topic: "polygon_stop"
+
+    # ---- what the monitor watches: the real lidar AND the forklift cloud ----
+    observation_sources: ["scan", "forklift"]
+    scan:
+      type: "scan"
+      topic: "/scan"
+    forklift:
+      type: "pointcloud"
+      topic: "/forklift_points"
+      min_height: 0.0
+      max_height: 2.0

@@ -1,0 +1,38 @@
+<!--
+  stop_and_wait_through_poses.xml  (warehouse_cleaning_robot)
+  Nav2 Humble's navigate_through_poses_w_replanning_and_recovery.xml
+  with ONE change, the recovery moves. Default: clear the costmaps, spin 90 deg,
+  wait 5 s, back up 0.3 m, in turn. Next to a person, spinning and reversing
+  are what a driver must not do. Here the robot holds still for 2 s, clears
+  its local costmap and tries again (not the global one: wiping it only
+  blinds the planner). After 6 tries the goal fails and the mission layer
+  decides (skip the aisle, come back later).
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
+      <PipelineSequence name="NavigateWithReplanning">
+        <RateController hz="0.333">
+          <RecoveryNode number_of_retries="1" name="ComputePathThroughPoses">
+            <ReactiveSequence>
+              <RemovePassedGoals input_goals="{goals}" output_goals="{goals}" radius="0.7"/>
+              <ComputePathThroughPoses goals="{goals}" path="{path}" planner_id="GridBased"/>
+            </ReactiveSequence>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
+        </RateController>
+        <RecoveryNode number_of_retries="1" name="FollowPath">
+          <FollowPath path="{path}" controller_id="FollowPath"/>
+          <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+        </RecoveryNode>
+      </PipelineSequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <Sequence name="HoldAndClear">
+          <Wait wait_duration="2"/>
+          <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
+        </Sequence>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

@@ -1,0 +1,46 @@
+### EKF config -- fuses wheel odometry (/odom) + IMU (/imu)
+### Output: /odometry/filtered, and the odom -> base_link transform.
+###
+### CHANGE FROM PREVIOUS VERSION (one line, marked below):
+### we now ALSO fuse the wheel odometry's vy. A differential-drive robot
+### physically cannot move sideways, and the Gazebo diff-drive plugin always
+### reports vy = 0. Telling the EKF "vy is measured = 0" clamps lateral motion,
+### which removes the small vy leak (was ~0.009 m/s) that slowly bends the path.
+
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    two_d_mode: true              # flat-floor robot -> ignore z/roll/pitch (stabilises)
+    publish_tf: true              # EKF publishes odom -> base_link
+    publish_acceleration: false
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom             # fuse to the odom frame (slam_toolbox owns map->odom)
+
+    use_sim_time: true
+
+    ## --- Source 1: wheel odometry ---
+    odom0: /odom
+    # [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
+    odom0_config: [true,  true,  false,    # x, y position from wheels
+                   false, false, false,    # no roll/pitch/yaw from wheels
+                   true,  true,  false,    # vx AND vy from wheels  <-- vy NOW TRUE
+                   false, false, true,     # yaw rate from wheels
+                   false, false, false]
+    odom0_differential: false
+    odom0_relative: false
+    odom0_queue_size: 10
+
+    ## --- Source 2: IMU ---
+    imu0: /imu
+    imu0_config: [false, false, false,     # IMU not used for position
+                  false, false, true,      # YAW (heading) from IMU -- its strength
+                  false, false, false,
+                  false, false, true,      # yaw rate from IMU
+                  false, false, false]     # linear accel unused (noisy, 2D mode)
+    imu0_differential: false
+    imu0_relative: false
+    imu0_queue_size: 10
+    imu0_remove_gravitational_acceleration: true

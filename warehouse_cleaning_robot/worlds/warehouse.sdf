@@ -1,0 +1,141 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+
+  <world name="warehouse">
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="c"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry></collision>
+        <visual name="v"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry>
+          <material><ambient>0.3 0.3 0.3 1</ambient><diffuse>0.5 0.5 0.5 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <!-- OUTER WALLS -->
+    <model name="back_wall"><static>true</static><pose>7.5 20 1 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>15 0.2 2</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>15 0.2 2</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material></visual>
+      </link></model>
+
+    <model name="front_wall"><static>true</static><pose>7.5 0 1 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>15 0.2 2</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>15 0.2 2</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material></visual>
+      </link></model>
+
+    <model name="left_wall"><static>true</static><pose>0 10 1 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.2 20 2</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>0.2 20 2</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material></visual>
+      </link></model>
+
+    <model name="right_wall"><static>true</static><pose>15 10 1 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.2 20 2</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>0.2 20 2</size></box></geometry>
+          <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material></visual>
+      </link></model>
+
+    <!-- GROUND ZONES (Y=0.5 to 2.5) -->
+    <model name="packing_area"><static>true</static><pose>2.5 1.5 0.75 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>3 2 1.5</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>3 2 1.5</size></box></geometry>
+          <material><ambient>0.8 0.5 0.2 1</ambient><diffuse>0.9 0.6 0.3 1</diffuse></material></visual>
+      </link></model>
+
+    <model name="pallet_area"><static>true</static><pose>5 1.5 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>1 2 1</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>1 2 1</size></box></geometry>
+          <material><ambient>0.5 0.3 0.2 1</ambient><diffuse>0.6 0.4 0.2 1</diffuse></material></visual>
+      </link></model>
+
+    <model name="office"><static>true</static><pose>12 1.5 1 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>4 2 2</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>4 2 2</size></box></geometry>
+          <material><ambient>0.3 0.5 0.4 1</ambient><diffuse>0.4 0.6 0.5 1</diffuse></material></visual>
+      </link></model>
+
+    <!-- 4 STORAGE RACKS -->
+    <model name="rack_1"><static>true</static><pose>1.5 11.5 1 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>1 12 2</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>1 12 2</size></box></geometry>
+          <material><ambient>0.2 0.3 0.6 1</ambient><diffuse>0.3 0.4 0.7 1</diffuse></material></visual>
+      </link></model>
+
+    <model name="rack_2"><static>true</static><pose>5.5 11.5 1 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>1 12 2</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>1 12 2</size></box></geometry>
+          <material><ambient>0.2 0.3 0.6 1</ambient><diffuse>0.3 0.4 0.7 1</diffuse></material></visual>
+      </link></model>
+
+    <model name="rack_3"><static>true</static><pose>9.5 11.5 1 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>1 12 2</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>1 12 2</size></box></geometry>
+          <material><ambient>0.2 0.3 0.6 1</ambient><diffuse>0.3 0.4 0.7 1</diffuse></material></visual>
+      </link></model>
+
+    <model name="rack_4"><static>true</static><pose>13.5 11.5 1 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>1 12 2</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>1 12 2</size></box></geometry>
+          <material><ambient>0.2 0.3 0.6 1</ambient><diffuse>0.3 0.4 0.7 1</diffuse></material></visual>
+      </link></model>
+
+    <!-- SIDE-PASS PALLETS -->
+    <model name="pallet_1"><static>true</static><pose>0.6 9 0.075 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.8 1.2 0.15</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>0.8 1.2 0.15</size></box></geometry>
+          <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.65 0.4 0.2 1</diffuse></material></visual>
+      </link></model>
+
+    <model name="pallet_2"><static>true</static><pose>14.4 9 0.075 0 0 0</pose>
+      <link name="link">
+        <collision name="c"><geometry><box><size>0.8 1.2 0.15</size></box></geometry></collision>
+        <visual name="v"><geometry><box><size>0.8 1.2 0.15</size></box></geometry>
+          <material><ambient>0.55 0.35 0.15 1</ambient><diffuse>0.65 0.4 0.2 1</diffuse></material></visual>
+      </link></model>
+        <!-- TEST ACTOR: detection check only, remove before any coverage run -->
+        <!-- TEST ACTOR: detection check only, remove before any coverage run -->
+        <!-- TEST ACTOR: crossing worker, aisle 1 at y=8. Remove before any coverage run -->
+    <actor name="worker_test">
+      <skin>
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/walk.dae</filename>
+      </skin>
+      <animation name="walk">
+        <filename>https://fuel.gazebosim.org/1.0/Mingfei/models/actor/tip/files/meshes/walk.dae</filename>
+        <interpolate_x>true</interpolate_x>
+      </animation>
+      <script>
+        <loop>true</loop>
+        <auto_start>true</auto_start>
+        <trajectory id="0" type="walk">
+          <waypoint><time>0.0</time><pose>2.4 8.0 1.0 0 0 0</pose></waypoint>
+          <waypoint><time>2.2</time><pose>4.6 8.0 1.0 0 0 0</pose></waypoint>
+          <waypoint><time>3.0</time><pose>4.6 8.0 1.0 0 0 3.1416</pose></waypoint>
+          <waypoint><time>5.2</time><pose>2.4 8.0 1.0 0 0 3.1416</pose></waypoint>
+          <waypoint><time>6.0</time><pose>2.4 8.0 1.0 0 0 0</pose></waypoint>
+        </trajectory>
+      </script>
+    </actor>
+  </world>
+</sdf>

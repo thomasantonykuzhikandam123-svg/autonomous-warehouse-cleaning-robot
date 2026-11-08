@@ -1,0 +1,18 @@
+# ROS 2 build output
+build/
+install/
+log/
+# Python
+__pycache__/
+*.pyc
+# installer backups and temp files
+*.~*~
+*.tmp
+# recordings, packs and videos (they belong in ~/runs, not here)
+*.npz
+*.tgz
+*.tar
+*.zip
+*.mp4
+*.mov
+*.mkv

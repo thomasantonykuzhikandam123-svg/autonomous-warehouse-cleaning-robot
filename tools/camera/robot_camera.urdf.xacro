@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<!--
+  robot_camera.urdf.xacro (v8) - your robot, unchanged, plus a camera on a short mast.
+
+  The locked robot.urdf.xacro is NOT edited: it is included as it is (launch_sim_camera.launch.py
+  passes its path as base:=...), and this file only ADDS three links. check_camera_urdf.py proves
+  that every element of the original robot is still there, identical.
+
+  Camera: 0.25 m forward of the axle, 0.60 m above the floor, looking straight ahead,
+  640 x 480 at 5 Hz, 90 deg wide (Gazebo Fortress camera sensor -> /camera/image_raw and
+  /camera/camera_info). The mast starts on top of the chassis (z 0.30 m), so nothing new
+  crosses the lidar's scan plane (z 0.28 m). No collision shapes: it can't touch anything,
+  and its 20 g are lumped into the chassis (5 kg) by Gazebo.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="warehouse_robot">
+
+  <xacro:arg name="base" default=""/>
+  <xacro:arg name="width" default="640"/>
+  <xacro:arg name="height" default="480"/>
+  <xacro:arg name="rate" default="5"/>
+  <xacro:arg name="hfov" default="1.5708"/>
+
+  <xacro:include filename="$(arg base)"/>
+
+  <joint name="camera_joint" type="fixed">
+    <parent link="chassis"/><child link="camera_link"/>
+    <!-- chassis centre is 0.20 m above base_link: camera at 0.60 m -->
+    <origin xyz="0.25 0 0.40" rpy="0 0 0"/>
+  </joint>
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.04 0.10 0.04"/></geometry>
+      <material name="black"/>
+    </visual>
+    <visual>
+      <!-- mast: from the chassis top (0.30 m) up to the camera (0.58 m) -->
+      <origin xyz="-0.01 0 -0.16" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.012" length="0.28"/></geometry>
+      <material name="grey"/>
+    </visual>
+    <inertial>
+      <mass value="0.02"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <!-- ROS image frame: z forward, x right, y down -->
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_link"/><child link="camera_optical_link"/>
+    <origin xyz="0 0 0" rpy="-1.5708 0 -1.5708"/>
+  </joint>
+  <link name="camera_optical_link"/>
+
+  <gazebo reference="camera_link">
+    <sensor name="eye_camera" type="camera">
+      <topic>camera/image_raw</topic>
+      <update_rate>$(arg rate)</update_rate>
+      <always_on>true</always_on>
+      <visualize>false</visualize>
+      <gz_frame_id>camera_optical_link</gz_frame_id>
+      <camera name="eye">
+        <horizontal_fov>$(arg hfov)</horizontal_fov>
+        <image><width>$(arg width)</width><height>$(arg height)</height><format>R8G8B8</format></image>
+        <clip><near>0.05</near><far>25.0</far></clip>
+        <noise><type>gaussian</type><mean>0.0</mean><stddev>0.005</stddev></noise>
+      </camera>
+    </sensor>
+  </gazebo>
+
+</robot>

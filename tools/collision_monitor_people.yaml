@@ -1,0 +1,55 @@
+# collision_monitor_people.yaml (v7) - Nav2 Collision Monitor for people_guard.py.
+#
+# Two zones (in Humble every source feeds every zone, so where a zone sits
+# decides what can trigger it):
+#   PeopleHold  STOP. A small square INSIDE the robot's body, where the lidar
+#               can never see anything. Only people_guard.py puts points there
+#               (while the robot must wait for someone), so racks and walls can
+#               never trigger this stop. (v5 had a box in front of the robot fed
+#               by the lidar too; it saw a rack face and left the robot stuck.)
+#   Brake       APPROACH, like a car's emergency braking. A circle the size of
+#               the robot is driven forward along the current command; if it
+#               would touch anything the raw lidar sees within 1 s, the command
+#               is scaled down so the robot always stays 1 s from it. Turning on
+#               the spot is never limited (the circle doesn't move), so it can't
+#               trap the robot facing a rack.
+#
+# Chain (nav2_people.launch.py v7; this file is unchanged since v5.1 apart from this comment):
+#   velocity_smoother --cmd_vel_raw--> guard_gate --cmd_vel_safe_in--> collision_monitor --cmd_vel--> robot
+collision_monitor:
+  ros__parameters:
+    use_sim_time: True
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"              # unused: base_shift_correction is False
+    cmd_vel_in_topic: "cmd_vel_safe_in"
+    cmd_vel_out_topic: "cmd_vel"
+    transform_tolerance: 0.5
+    source_timeout: 1.0                # a source silent for 1 s is ignored
+    base_shift_correction: False
+    stop_pub_timeout: 2.0
+    polygons: ["PeopleHold", "Brake"]
+    PeopleHold:
+      type: "polygon"
+      points: [0.2, 0.2, 0.2, -0.2, -0.2, -0.2, -0.2, 0.2]   # x, y pairs in base_link: inside the robot
+      action_type: "stop"
+      max_points: 2                    # the guard puts 5 points here while waiting
+      visualize: True
+      polygon_pub_topic: "people_hold_zone"
+    Brake:
+      type: "circle"
+      radius: 0.32                     # robot_radius 0.30 + 2 cm
+      action_type: "approach"
+      time_before_collision: 1.0       # s kept between the robot and anything in its way
+      simulation_time_step: 0.05
+      max_points: 3
+      visualize: True
+      polygon_pub_topic: "brake_zone"
+    observation_sources: ["people_hold", "scan"]
+    people_hold:
+      type: "pointcloud"
+      topic: "/people_guard/hold"
+      min_height: 0.1
+      max_height: 1.0
+    scan:
+      type: "scan"
+      topic: "/scan"

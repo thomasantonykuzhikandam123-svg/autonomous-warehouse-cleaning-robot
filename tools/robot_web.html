@@ -1,0 +1,1417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot Mission Control</title>
+<style>
+:root {
+  --bg: #0a0e13; --panel: #10161e; --panel2: #151d27; --line: #223042; --line2: #2c3b50;
+  --text: #e8eef5; --muted: #8b98aa; --dim: #5d6a7c;
+  --accent: #38bdf8; --go: #22c55e; --wait: #ef4444; --warn: #f59e0b; --violet: #a78bfa;
+  --radius: 12px;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- top bar */
+.top {
+  display: flex; align-items: center; gap: 14px; padding: 10px 16px;
+  border-bottom: 1px solid var(--line); background: linear-gradient(180deg, #0f151d, #0b1016);
+  flex: 0 0 auto; min-height: 58px;
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--dim); box-shadow: 0 0 0 3px rgba(255,255,255,.05); flex: none; }
+.brand .dot.live { background: var(--go); box-shadow: 0 0 0 3px rgba(34,197,94,.18), 0 0 14px rgba(34,197,94,.6); }
+.brand .dot.replay { background: var(--violet); box-shadow: 0 0 0 3px rgba(167,139,250,.18); }
+.brand .dot.down { background: var(--wait); }
+.brand h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; white-space: nowrap; }
+.brand .sub { color: var(--muted); font-weight: 500; }
+.pills { display: flex; gap: 8px; flex-wrap: wrap; margin-left: 6px; }
+.pill {
+  font-size: 12px; color: var(--muted); border: 1px solid var(--line2); border-radius: 999px;
+  padding: 3px 10px; white-space: nowrap; background: rgba(255,255,255,.02);
+}
+.pill b { color: var(--text); font-weight: 600; }
+.pill.ok { border-color: rgba(34,197,94,.45); }
+.pill.bad { border-color: rgba(239,68,68,.55); color: #fca5a5; }
+.spacer { flex: 1; }
+.btn {
+  border: 1px solid var(--line2); background: var(--panel2); border-radius: 10px; padding: 7px 12px;
+  display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+}
+.btn:hover { border-color: #3b4f6a; background: #1a2430; }
+.btn.on { border-color: rgba(56,189,248,.6); background: rgba(56,189,248,.12); }
+.btn.icon { padding: 7px 9px; }
+a.btn { color: inherit; text-decoration: none; }
+.stop {
+  border: 0; border-radius: 12px; padding: 9px 20px; font-weight: 800; letter-spacing: 1.5px;
+  background: linear-gradient(180deg, #ef4444, #b91c1c); color: #fff;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset, 0 6px 18px rgba(239,68,68,.35);
+}
+.stop:hover { filter: brightness(1.08); }
+.stop:active { transform: translateY(1px); }
+.stop.flash { animation: flash .6s ease 2; }
+.stop.held { background: repeating-linear-gradient(135deg, #facc15 0 12px, #1f2937 12px 24px); color: #fff; text-shadow: 0 1px 2px #000, 0 0 6px #000; box-shadow: 0 0 0 2px #facc15, 0 6px 22px rgba(250,204,21,.35); }
+@keyframes flash { 50% { box-shadow: 0 0 0 6px rgba(239,68,68,.35), 0 6px 18px rgba(239,68,68,.5); } }
+
+/* ---------- layout */
+main { flex: 1 1 auto; display: grid; grid-template-columns: minmax(0, 1fr) 430px; min-height: 0; }
+.mapwrap { position: relative; min-width: 0; min-height: 0; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+.mapbox { position: relative; flex: 1 1 auto; min-height: 0; background: radial-gradient(ellipse at 50% 40%, #0e151e 0%, #0a0e13 70%); }
+#map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#map.dragging { cursor: grabbing; }
+#map.zonehover { cursor: pointer; }
+.side { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; background: #0c1117; }
+.card.grow { flex: 1 1 auto; min-height: 170px; display: flex; flex-direction: column; }
+.card.grow .feed { flex: 1 1 auto; max-height: none; min-height: 90px; }
+
+/* ---------- map overlays */
+.decision {
+  flex: 0 0 auto; display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; align-items: center;
+  background: #0d131a; border-bottom: 1px solid var(--line); border-left: 6px solid var(--dim);
+  padding: 9px 16px 10px; min-height: 64px; transition: background .3s ease;
+}
+.decision .k { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); grid-column: 1 / 3; }
+.decision .v { font-size: 17px; font-weight: 700; white-space: nowrap; }
+.decision .s { color: #c9d4e2; font-size: 14px; min-width: 0; }
+.decision.go { border-left-color: var(--go); }
+.decision.wait { border-left-color: var(--wait); background: linear-gradient(90deg, rgba(127,29,29,.55), #0d131a 70%); }
+.decision.wait .v { color: #fecaca; }
+.decision.slow { border-left-color: var(--warn); }
+.decision.idle { border-left-color: var(--accent); }
+.maptools { position: absolute; right: 12px; top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.maptools .btn { padding: 6px 9px; font-size: 13px; background: rgba(21,29,39,.92); }
+.layers {
+  position: absolute; right: 56px; top: 12px; background: rgba(16,22,30,.97); border: 1px solid var(--line2);
+  border-radius: 10px; padding: 10px 12px; display: none; min-width: 210px; z-index: 5;
+}
+.layers.open { display: block; }
+.layers label { display: flex; gap: 8px; align-items: center; padding: 3px 0; cursor: pointer; font-size: 13px; }
+.layers h4 { margin: 2px 0 6px; font-size: 11px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--muted); }
+.legend {
+  flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 3px 16px; padding: 6px 14px; font-size: 11.5px; color: #b8c4d3;
+  border-top: 1px solid var(--line); background: #0b1016;
+}
+.legend span { white-space: nowrap; }
+.legend i { display: inline-block; width: 16px; height: 9px; margin-right: 5px; vertical-align: -1px; border-radius: 3px; }
+.legend.hidden { display: none; }
+.cam {
+  position: absolute; right: 12px; bottom: 12px; width: 240px; border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--line2); background: #000; box-shadow: 0 8px 26px rgba(0,0,0,.5); cursor: zoom-in;
+}
+.cam.big { width: min(560px, 60%); cursor: zoom-out; }
+.cam img { display: block; width: 100%; }
+.cam .cap { position: absolute; left: 0; right: 0; top: 0; font-size: 11px; padding: 4px 8px; background: linear-gradient(180deg, rgba(0,0,0,.75), transparent); color: #dbe7f3; }
+.cam[hidden] { display: none; }
+.banner {
+  position: absolute; left: 50%; top: 14px; transform: translateX(-50%); background: rgba(127,29,29,.92);
+  border: 1px solid rgba(248,113,113,.6); border-radius: 10px; padding: 8px 14px; font-size: 13px;
+  max-width: 60%; text-align: center; z-index: 4;
+}
+.banner[hidden] { display: none; }
+.banner.estop { background: rgba(153,27,27,.96); border-color: #fca5a5; font-weight: 600; font-size: 14px; box-shadow: 0 8px 30px rgba(239,68,68,.35); }
+.zonepop {
+  position: absolute; background: rgba(16,22,30,.98); border: 1px solid var(--line2); border-radius: 12px;
+  padding: 12px; min-width: 220px; z-index: 6; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+.zonepop[hidden] { display: none; }
+.zonepop .t { font-weight: 650; font-size: 15px; }
+.zonepop .d { color: var(--muted); font-size: 12px; margin: 3px 0 10px; }
+.zonepop .row { display: flex; gap: 8px; }
+.zonepop .go { background: var(--go); border: 0; color: #04140a; font-weight: 700; border-radius: 9px; padding: 7px 12px; }
+.timeline { flex: 0 0 30px; height: 30px; min-height: 0; position: relative; overflow: hidden; border-top: 1px solid var(--line); background: #0b1016; }
+.timeline canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.replaybar {
+  flex: 0 0 auto; display: flex; gap: 10px; align-items: center; padding: 6px 14px;
+  border-top: 1px solid rgba(167,139,250,.45); background: #120f1f;
+}
+.replaybar[hidden] { display: none; }
+.replaybar input[type=range] { flex: 1; accent-color: var(--violet); }
+.replaybar .lbl { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.replaybar select { background: var(--panel2); color: var(--text); border: 1px solid var(--line2); border-radius: 8px; padding: 3px; }
+
+/* ---------- side cards */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.card h3 { margin: 0 0 10px; font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); font-weight: 650; display: flex; align-items: center; gap: 8px; }
+.card h3 .r { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.headline { font-size: 21px; font-weight: 700; line-height: 1.2; }
+.headline.wait { color: #fca5a5; }
+.headline.done { color: #86efac; }
+.subline { color: #c3cedc; margin-top: 4px; min-height: 20px; }
+.zones { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 12px; }
+.zrow { background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 5px 7px 6px; font-size: 12px; min-width: 0; }
+.zrow .n { color: #cdd7e4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zrow .bar { height: 6px; background: #1b2532; border-radius: 99px; overflow: hidden; position: relative; margin: 4px 0 3px; }
+.zrow .bar > span { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #16a34a, #22c55e); border-radius: 99px; transition: width .6s ease; }
+.zrow.now { border-color: rgba(56,189,248,.65); box-shadow: 0 0 12px rgba(56,189,248,.18); }
+.zrow.now .n { color: var(--accent); font-weight: 650; }
+.zrow.done { border-color: rgba(34,197,94,.45); }
+.zrow .p { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11.5px; min-height: 16px; }
+.zrow .p.done { color: #86efac; }
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 12px; }
+.kpi { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; min-width: 0; }
+.kpi .l { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .v { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kpi .v small { font-size: 12px; color: var(--muted); font-weight: 500; margin-left: 2px; }
+.kpi.alert { border-color: rgba(239,68,68,.5); }
+.kpi.warnk { border-color: rgba(245,158,11,.5); }
+
+.chat { display: flex; flex-direction: column; gap: 8px; height: clamp(100px, 18vh, 300px); overflow-y: auto; padding-right: 2px; }
+.msg { max-width: 88%; padding: 8px 11px; border-radius: 12px; font-size: 14px; white-space: pre-wrap; word-wrap: break-word; }
+.msg.you { align-self: flex-end; background: #1d4ed8; border-bottom-right-radius: 4px; }
+.msg.robot { align-self: flex-start; background: var(--panel2); border: 1px solid var(--line2); border-bottom-left-radius: 4px; }
+.msg .meta { display: block; font-size: 11px; color: rgba(255,255,255,.65); margin-top: 4px; }
+.msg.robot .meta { color: var(--muted); }
+.msg .tag { display: inline-block; font-size: 11px; border-radius: 6px; padding: 1px 6px; margin-top: 5px; background: rgba(34,197,94,.14); color: #86efac; border: 1px solid rgba(34,197,94,.35); }
+.msg .tag.no { background: rgba(245,158,11,.12); color: #fcd34d; border-color: rgba(245,158,11,.35); }
+.msg.thinking { color: var(--muted); }
+.dots span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); margin-right: 4px; animation: bounce 1.2s infinite; }
+.dots span:nth-child(2) { animation-delay: .15s; } .dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes bounce { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.chip { border: 1px solid var(--line2); background: transparent; border-radius: 999px; padding: 4px 10px; font-size: 12.5px; color: #cfe0f2; }
+.chip:hover { background: #18222e; border-color: #3b4f6a; }
+.msg .pick { margin: 8px 0 2px; }
+.chip:disabled { opacity: .4; }
+.chip.on { opacity: 1; border-color: #4f8cff; color: #fff; }
+.talkrow { display: flex; gap: 8px; }
+.talkrow input {
+  flex: 1; min-width: 0; background: #0b1117; color: var(--text); border: 1px solid var(--line2); border-radius: 10px;
+  padding: 10px 12px; font: inherit;
+}
+.mic {
+  width: 44px; flex: none; border-radius: 10px; border: 1px solid var(--line2); background: var(--panel2);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.mic.listening { background: #dc2626; border-color: #f87171; box-shadow: 0 0 0 4px rgba(239,68,68,.25); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(239,68,68,.12); } }
+.mic.unavail { opacity: .55; }
+.send { border-radius: 10px; border: 0; background: var(--accent); color: #04121b; font-weight: 700; padding: 0 14px; }
+.note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.note a { color: var(--accent); }
+.feed { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; font-size: 13px; }
+.feed .l { display: grid; grid-template-columns: 52px 1fr; gap: 8px; color: #d3dde9; }
+.feed .l .t { color: var(--dim); font-variant-numeric: tabular-nums; text-align: right; }
+.feed .l.sys { color: var(--violet); }
+.empty { color: var(--dim); font-size: 13px; }
+.settings select { background: var(--panel2); color: var(--text); border: 1px solid var(--line2); border-radius: 8px; padding: 4px; max-width: 190px; }
+.foot { font-size: 11px; color: var(--dim); text-align: center; padding-bottom: 6px; }
+
+@media (max-width: 1100px) { main { grid-template-columns: minmax(0, 1fr) 360px; } .kpis { grid-template-columns: repeat(2, 1fr); } .pills .pill.hide-s { display: none; } }
+@media (max-width: 860px) {
+  body { overflow: auto; }
+  main { display: block; }
+  .mapwrap { height: 78vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .side { overflow: visible; }
+  .brand .sub, .pills, .brand h1 .long { display: none; }
+  .top { gap: 8px; padding: 8px 10px; }
+  #btn-voice .t, #btn-3d .t { display: none; }
+  .legend { display: none; }
+  .cam { width: 140px; }
+  .decision { grid-template-columns: 1fr; min-height: 0; }
+  .decision .v { white-space: normal; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="dot" id="linkdot"></span><h1><span class="long">Warehouse cleaning robot </span><span class="sub">· </span>Mission Control</h1></div>
+  <div class="pills">
+    <span class="pill" id="pill-mode">connecting…</span>
+    <span class="pill hide-s" id="pill-sim">sim —</span>
+    <span class="pill hide-s" id="pill-model">model —</span>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn" id="btn-voice" title="The robot's voice: off, its replies, or its replies and a running commentary">🔇 <span class="t">Voice off</span></button>
+  <a class="btn" id="btn-3d" href="/twin" title="The robot's view in 3D: what it sees, predicts and decides">◈ <span class="t">3D view</span></a>
+  <button class="btn icon" id="btn-settings" title="Settings" aria-label="Settings">⚙︎</button>
+  <button class="stop" id="btn-stop" title="Emergency stop: the safety gate holds the robot at zero speed and the job pauses (no model involved)">STOP</button>
+</header>
+
+<main>
+  <section class="mapwrap" id="mapwrap">
+    <div class="decision idle" id="decision"><div class="k">Safety layer</div><div class="v">Waiting for the robot…</div><div class="s"></div></div>
+    <div class="mapbox" id="mapbox">
+    <canvas id="map" aria-label="Live map of the warehouse"></canvas>
+    <div class="banner" id="banner" hidden></div>
+    <div class="maptools">
+      <button class="btn" id="btn-fit" title="Fit the map (double-click the map)">⤢</button>
+      <button class="btn" id="btn-rot" title="Turn the map 90°">⟳</button>
+      <button class="btn" id="btn-follow" title="Follow the robot">◎</button>
+      <button class="btn" id="btn-layers" title="What to show">☰</button>
+    </div>
+    <div class="layers" id="layers">
+      <h4>Show</h4>
+      <label><input type="checkbox" data-layer="predict" checked> What the guard predicts</label>
+      <label><input type="checkbox" data-layer="view" checked> What it can see now (the rest is shaded)</label>
+      <label><input type="checkbox" data-layer="lidar" checked> Lidar points</label>
+      <label><input type="checkbox" data-layer="trail" checked> Robot's trail</label>
+      <label><input type="checkbox" data-layer="plan" checked> Path it follows</label>
+      <label><input type="checkbox" data-layer="holds" checked> Where it stopped for people</label>
+      <label><input type="checkbox" data-layer="coverage" checked> Floor cleaned</label>
+      <label><input type="checkbox" data-layer="wet" checked> Wet floor (blue: still wet; amber: cleaned dry where people walk)</label>
+      <label><input type="checkbox" data-layer="zones" checked> Zones (click to clean)</label>
+      <label><input type="checkbox" data-layer="truth"> Simulator truth: everyone, and what the robot knows of them (it never gets this)</label>
+      <label><input type="checkbox" data-layer="legend" checked> Legend</label>
+      <label><input type="checkbox" data-layer="camera" checked> Robot's camera</label>
+    </div>
+    <div class="cam" id="cam" hidden><img id="camimg" alt="The robot's camera"><div class="cap">Robot's camera · people found by the detector on the Mac</div></div>
+    <div class="zonepop" id="zonepop" hidden>
+      <div class="t" id="zp-t">Aisle 2</div>
+      <div class="d" id="zp-d">Send the robot to clean it</div>
+      <div class="row"><button class="go" id="zp-go">Clean it</button><button class="btn" id="zp-x">Cancel</button></div>
+    </div>
+    </div>
+    <div class="legend" id="legend">
+      <span><i style="background:#0ea5e9"></i>Robot</span>
+      <span><i style="background:rgba(34,197,94,.55)"></i>Floor cleaned</span>
+      <span><i style="background:rgba(56,189,248,.6)"></i>Still wet</span>
+      <span><i style="background:rgba(251,191,36,.5)"></i>Cleaned dry: people walk here</span>
+      <span><i style="background:#f59e0b;border-radius:50%;width:10px"></i>Person crossing</span>
+      <span><i style="background:#3b82f6;border-radius:50%;width:10px"></i>Person along the path</span>
+      <span><i style="background:#ef4444;border-radius:50%;width:10px"></i>Person it waits for</span>
+      <span><i style="background:transparent;border-top:2px solid #f87171;height:0;border-radius:0"></i>Where they may walk</span>
+      <span><i style="background:rgba(251,191,36,.35)"></i>Walkway / crossing zone</span>
+      <span><i style="background:#fff;height:3px"></i>Stop line</span>
+      <span><i style="background:rgba(249,115,22,.55)"></i>Vehicle</span>
+      <span><i style="background:transparent;border-top:2px dashed #38bdf8;height:0;border-radius:0"></i>Path it follows</span>
+      <span><i style="background:transparent;border:2px solid rgba(239,68,68,.8);border-radius:50%;width:10px"></i>Stopped for people</span>
+      <span><i style="background:#fb7185;border-radius:50%;width:5px;height:5px"></i>Lidar</span>
+      <span><i style="background:rgba(2,6,23,.75);border:1px solid rgba(125,211,252,.4)"></i>Can't see from here</span>
+      <span><i style="background:transparent;border:2px dashed rgba(148,163,184,.9);border-radius:50%;width:10px"></i>Lost from view: where they might be</span>
+    </div>
+    <div class="replaybar" id="replaybar" hidden>
+      <button class="btn icon" id="rp-play" title="Play / pause">⏸</button>
+      <select id="rp-speed" title="Replay speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+      <input type="range" id="rp-slider" min="0" max="100" step="0.5" value="0" aria-label="Replay time">
+      <span class="lbl" id="rp-lbl">—</span>
+    </div>
+    <div class="timeline" title="What the safety layer did, over the last minutes of robot time: green = going, amber = slowed, red = stopped for someone, grey = no job"><canvas id="tl"></canvas></div>
+  </section>
+
+  <aside class="side">
+    <div class="card">
+      <h3>The robot now <span class="r" id="goalinfo"></span></h3>
+      <div class="headline" id="headline">Connecting…</div>
+      <div class="subline" id="subline"></div>
+      <div class="zones" id="zones"></div>
+      <div class="kpis" id="kpis"></div>
+    </div>
+
+    <div class="card">
+      <h3>Talk to the robot <span class="r" id="agentinfo"></span></h3>
+      <div class="chat" id="chat"><div class="empty" id="chat-empty">Ask it anything, or give it a job. It answers from what it is actually doing.</div></div>
+      <div class="chips" id="chips"></div>
+      <form class="talkrow" id="talkform" autocomplete="off">
+        <input id="talk" placeholder="Say or type: clean aisle 2 · why did you stop?" aria-label="Talk to the robot">
+        <button type="button" class="mic" id="mic" title="Speak (Chrome or Safari, page from localhost)" aria-label="Speak">🎤</button>
+        <button type="submit" class="send">Send</button>
+      </form>
+      <div class="note" id="micnote"></div>
+    </div>
+
+    <div class="card grow">
+      <h3>Robot says <span class="r" id="saysinfo">what it is doing, as it happens</span></h3>
+      <div class="feed" id="says"><div class="empty">Nothing yet.</div></div>
+    </div>
+
+    <div class="card settings" id="settings" hidden>
+      <h3>Settings</h3>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 10px;align-items:center;font-size:13px">
+        <span>Robot voice</span><select id="set-voice"></select>
+        <span>Microphone language</span>
+        <select id="set-lang"><option value="en-AU">English (Australia)</option><option value="en-GB">English (UK)</option><option value="en-US">English (US)</option><option value="en-IN">English (India)</option></select>
+        <span>Speaking rate</span><select id="set-rate"><option value="0.9">slower</option><option value="1" selected>normal</option><option value="1.12">faster</option></select>
+        <span>Speech to text</span><select id="set-ear"><option value="auto">Whisper on this Mac, when ear_server.py runs</option><option value="browser">The browser's own</option></select>
+      </div>
+      <div class="note" id="earnote"></div>
+      <div class="note">A more natural robot voice: on the Mac, System Settings → Accessibility → Spoken Content → System voice → Manage Voices, download a <b>Premium</b> or <b>Enhanced</b> English voice, reload, and pick it above.</div>
+      <div class="note" id="feeds">Feeds: —</div>
+      <div class="note">Mic not working? The page must come from <b>localhost</b>: on the Mac, <a href="/mac.py" download>get mac_web.py</a>, run <code>python3 mac_web.py</code>, open <code>http://localhost:8080</code>. Or click the talk box and use the Mac's dictation (the 🎤 key, or Fn twice).</div>
+    </div>
+    <div class="foot" id="foot">robot_web</div>
+  </aside>
+</main>
+
+<script>
+'use strict';
+// ------------------------------------------------------------------ helpers
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ZNAME = { front: 'Front area', aisle_1: 'Aisle 1', aisle_2: 'Aisle 2', aisle_3: 'Aisle 3', back: 'Back area', home: 'the dock' };
+const ZSAY = { front: 'the front area', aisle_1: 'aisle 1', aisle_2: 'aisle 2', aisle_3: 'aisle 3', back: 'the back area' };
+const ZORDER = ['front', 'aisle_1', 'aisle_2', 'aisle_3', 'back'];
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('rw.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('rw.' + k, JSON.stringify(v)); } catch (e) { /* private window */ } },
+};
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const cap1 = (s) => (s ? s[0].toUpperCase() + s.slice(1) : '');
+const rgba = (c, k = 1) => `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${clamp(c[3] * k, 0, 1)})`;
+function mmss(t) { if (t == null) return '—'; t = Math.max(0, t); const m = Math.floor(t / 60), s = Math.floor(t % 60); return `${m}:${String(s).padStart(2, '0')}`; }
+function fmt(v, d = 1) { return v == null || Number.isNaN(v) ? '—' : Number(v).toFixed(d); }
+
+// ------------------------------------------------------------------ state
+const S = {
+  st: null, seq: 0, trailTo: 0, epoch: 0, trail: [], linkOk: false, lastOk: 0, first: true,
+  map: null, mapV: -1, mapImg: null, cov: null, covV: -1, covImg: null, covBusy: false, covAt: 0,
+  robotPrev: null, robotCur: null, robotAt: 0,
+  timeline: [], pending: {}, camOn: false,
+  layers: Object.assign({ predict: true, view: true, lidar: true, trail: true, plan: true, holds: true, coverage: true, wet: true, zones: true, truth: false, legend: true, camera: true },
+    store.get('layers', {})),
+  view: { s: 30, cx: 3.5, cy: 6, rot: store.get('rot', null), follow: false, fitted: false },
+  voice: store.get('voice', 0), // 0 off, 1 replies, 2 replies + commentary
+};
+
+// ------------------------------------------------------------------ polling
+async function poll() {
+  const t0 = performance.now();
+  try {
+    const r = await fetch(`/api/state?since=${S.seq}&trail=${S.trailTo}&epoch=${S.epoch}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    const st = await r.json();
+    S.linkOk = true; S.lastOk = Date.now();
+    onState(st);
+  } catch (e) {
+    if (Date.now() - S.lastOk > 2500) S.linkOk = false;
+    renderLink();
+  }
+  const dt = performance.now() - t0;
+  setTimeout(poll, Math.max(40, (document.hidden ? 1000 : 200) - dt));
+}
+
+function onState(st) {
+  const prevMission = S.st && S.st.mission;
+  S.st = st;
+  if (st.map_v !== S.mapV) loadMap(st.map_v);
+  if (st.cov_v !== S.covV && S.map) loadCoverage(st.cov_v);
+  if (st.wet && st.wet.v !== S.wetV && S.layers.wet) loadWet(st.wet.v);     // v10.13
+  // robot pose: interpolate between the last two
+  if (st.robot) {
+    const now = performance.now();
+    S.robotPrev = S.robotCur ? currentPose() : st.robot;
+    S.robotCur = st.robot; S.robotAt = now;
+  }
+  // trail
+  const tr = st.trail;
+  if (tr) {
+    if (tr.epoch !== S.epoch) { S.trail = []; S.epoch = tr.epoch; S.timeline = []; }
+    if (tr.pts.length) S.trail.push(...tr.pts);
+    if (S.trail.length > 8000) S.trail.splice(0, S.trail.length - 8000);
+    S.trailTo = tr.to;
+  }
+  // timeline sample
+  const m = st.mission, g = st.guard;
+  if (st.sim != null) {
+    const busy = m && !(m.done || m.paused || m.awaiting_command);
+    let c = 0; // 0 idle, 1 go, 2 slow, 3 wait
+    if (busy && g) c = g.state === 'wait' ? 3 : (g.v_limit != null && g.v_limit < 0.75 ? 2 : 1);
+    const last = S.timeline[S.timeline.length - 1];
+    if (last && st.sim < last[0] - 1) S.timeline = [];
+    if (!last || st.sim - last[0] >= 0.25) S.timeline.push([st.sim, c]);
+    if (S.timeline.length > 4000) S.timeline.splice(0, S.timeline.length - 4000);
+  }
+  // events
+  for (const ev of st.events || []) handleEvent(ev, S.first);
+  S.seq = st.seq;
+  S.first = false;
+  renderLink(); renderStatus(); renderDecision(); renderReplay(); renderCamera(); renderStopBtn();
+}
+
+async function loadMap(v) {
+  S.mapV = v;
+  try {
+    const r = await fetch('/api/map', { cache: 'no-store' });
+    if (r.status !== 200) { S.mapV = -1; return; }
+    const m = await r.json();
+    const raw = Uint8Array.from(atob(m.data), (c) => c.charCodeAt(0));
+    m.grid = new Int8Array(raw.buffer);
+    S.map = m;
+    S.mapImg = gridImage(m.w, m.h, (k) => {
+      const v = m.grid[k];
+      if (v < 0) return [0, 0, 0, 0];
+      if (v >= 50) return [94, 109, 130, 255];
+      return [24, 32, 43, 255];
+    });
+    S.covV = -1;
+    if (!S.view.fitted) fit();
+  } catch (e) { S.mapV = -1; }
+}
+
+async function loadCoverage(v) {
+  const now = performance.now();
+  if (S.covBusy || now - S.covAt < 800) return;
+  S.covBusy = true; S.covAt = now;
+  try {
+    const r = await fetch('/api/coverage', { cache: 'no-store' });
+    if (r.status === 200) {
+      const c = await r.json();
+      if (S.map && c.w === S.map.w && c.h === S.map.h) {
+        const raw = Uint8Array.from(atob(c.data), (ch) => ch.charCodeAt(0));
+        const g = new Int8Array(raw.buffer);
+        S.cov = c;
+        S.covImg = gridImage(c.w, c.h, (k) => {
+          const v = g[k];
+          if (v <= 0) return [0, 0, 0, 0];
+          const passes = Math.min(4, Math.max(1, Math.round(v / 30)));
+          return [34, 197, 94, [0, 105, 140, 170, 195][passes]];
+        });
+      }
+      S.covV = c.v;
+    }
+  } catch (e) { /* next time */ }
+  S.covBusy = false;
+}
+
+// v10.13: the wet-floor guardian's map (its own 0.1 m grid): blue = still wet (fading as it dries),
+// amber = cleaned with the water off because people walk there (it needs a wet pass when quiet)
+async function loadWet(v) {
+  const now = performance.now();
+  if (S.wetBusy || now - (S.wetAt || 0) < 900) return;
+  S.wetBusy = true; S.wetAt = now;
+  try {
+    const r = await fetch('/api/wet', { cache: 'no-store' });
+    if (r.status === 200) {
+      const c = await r.json();
+      const g = Uint8Array.from(atob(c.wet), (ch) => ch.charCodeAt(0));
+      S.wet = c;
+      S.wetImg = gridImage(c.w, c.h, (k) => {
+        const x = g[k];
+        if (!x) return [0, 0, 0, 0];
+        if (x === 200) return [251, 191, 36, 105];
+        return [56, 189, 248, Math.round(35 + 1.6 * x)];
+      });
+      S.wetV = c.v;
+    }
+  } catch (e) { /* next time */ }
+  S.wetBusy = false;
+}
+function drawCells(img, g) {
+  if (!img || !g) return;
+  const top = g.oy + g.h * g.res;
+  const o = toS(g.ox, top), u = toS(g.ox + g.res, top), v = toS(g.ox, top - g.res);
+  ctx.save();
+  ctx.setTransform(DPR * (u[0] - o[0]), DPR * (u[1] - o[1]), DPR * (v[0] - o[0]), DPR * (v[1] - o[1]), DPR * o[0], DPR * o[1]);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(img, 0, 0);
+  ctx.restore();
+}
+
+function gridImage(w, h, colour) {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  // canvas row 0 = top = the grid's last row (largest y)
+  for (let row = 0; row < h; row++) {
+    const gr = h - 1 - row;
+    for (let col = 0; col < w; col++) {
+      const c = colour(gr * w + col);
+      const o = (row * w + col) * 4;
+      img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = c[3];
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+}
+
+// ------------------------------------------------------------------ view
+const cvs = $('map'), ctx = cvs.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  const box = $('mapbox');
+  W = box.clientWidth; H = box.clientHeight;
+  if (!W || !H) return;
+  cvs.width = Math.round(W * DPR); cvs.height = Math.round(H * DPR);
+  const tl = $('tl'); tl.width = Math.round(tl.clientWidth * DPR); tl.height = Math.round(tl.clientHeight * DPR);
+  if (S.view.rot === null || S.view.rot === undefined) S.view.autoRot = true;
+  if (S.view.autoRot) S.view.rot = W > H * 1.08 ? 1 : 0;
+  if (!S.view.userMoved) fit();
+}
+function toS(x, y) {
+  const v = S.view;
+  if (v.rot === 1) return [W / 2 + (y - v.cy) * v.s, H / 2 + (x - v.cx) * v.s];
+  return [W / 2 + (x - v.cx) * v.s, H / 2 - (y - v.cy) * v.s];
+}
+function toW(sx, sy) {
+  const v = S.view;
+  if (v.rot === 1) return [v.cx + (sy - H / 2) / v.s, v.cy + (sx - W / 2) / v.s];
+  return [v.cx + (sx - W / 2) / v.s, v.cy - (sy - H / 2) / v.s];
+}
+function mapBounds() {
+  const m = S.map;
+  if (!m) return [-4, 11, -4, 16];
+  // the extent of known cells
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (let r = 0; r < m.h; r += 2) for (let c = 0; c < m.w; c += 2) {
+    if (m.grid[r * m.w + c] >= 0) { const x = m.ox + c * m.res, y = m.oy + r * m.res; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x0 > x1) return [m.ox, m.ox + m.w * m.res, m.oy, m.oy + m.h * m.res];
+  return [x0, x1, y0, y1];
+}
+function fit() {
+  if (!W || !H) return;
+  const [x0, x1, y0, y1] = mapBounds();
+  const v = S.view;
+  const wx = x1 - x0, wy = y1 - y0;
+  const pad = 28;
+  const sw = v.rot === 1 ? wy : wx, sh = v.rot === 1 ? wx : wy;
+  v.s = Math.max(4, Math.min((W - 2 * pad) / sw, (H - 2 * pad) / sh));
+  v.cx = (x0 + x1) / 2; v.cy = (y0 + y1) / 2;
+  v.fitted = !!S.map;
+}
+
+// ------------------------------------------------------------------ drawing
+function currentPose() {
+  const a = S.robotPrev, b = S.robotCur;
+  if (!b) return null;
+  if (!a) return b;
+  const f = clamp((performance.now() - S.robotAt) / 220, 0, 1);
+  let dy = b.yaw - a.yaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+  if (Math.hypot(b.x - a.x, b.y - a.y) > 1.5) return b;
+  return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, yaw: a.yaw + dy * f, v: b.v, dist: b.dist };
+}
+
+function polyline(pts, close) {
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i++) { const p = toS(pts[i][0], pts[i][1]); i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]); }
+  if (close) ctx.closePath();
+}
+function drawGrid(img) {
+  const m = S.map;
+  if (!m || !img) return;
+  const top = m.oy + m.h * m.res;
+  const o = toS(m.ox, top), u = toS(m.ox + m.res, top), v = toS(m.ox, top - m.res);
+  ctx.save();
+  ctx.setTransform(DPR * (u[0] - o[0]), DPR * (u[1] - o[1]), DPR * (v[0] - o[0]), DPR * (v[1] - o[1]), DPR * o[0], DPR * o[1]);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(img, 0, 0);
+  ctx.restore();
+}
+function label(text, x, y, opt = {}) {
+  ctx.font = `${opt.weight || 600} ${opt.size || 12}px system-ui, -apple-system, sans-serif`;
+  ctx.textAlign = opt.align || 'center'; ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round'; ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(6,10,14,.92)';
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = opt.color || '#e8eef5';
+  ctx.fillText(text, x, y);
+}
+let placed = [];                                  // label boxes drawn this frame (screen px)
+function overlaps(r) { return placed.some((q) => r[0] < q[0] + q[2] && r[0] + r[2] > q[0] && r[1] < q[1] + q[3] && r[1] + r[3] > q[1]); }
+function labelAvoid(text, x, y, opt = {}) {
+  ctx.font = `${opt.weight || 600} ${opt.size || 12}px system-ui, -apple-system, sans-serif`;
+  const w = ctx.measureText(text).width + 8, h = (opt.size || 12) + 5;
+  const tries = [0, h, -h, 2 * h, -2 * h, 3 * h];
+  for (const dy of tries) {
+    const r = [x - w / 2, y + dy - h / 2, w, h];
+    if (!overlaps(r)) { placed.push(r); label(text, x, y + dy, opt); return; }
+  }
+  placed.push([x - w / 2, y - h / 2, w, h]); label(text, x, y, opt);
+}
+function pill(text, x, y, bg) {
+  ctx.font = '700 12px system-ui, -apple-system, sans-serif';
+  const w = ctx.measureText(text).width + 14, h = 20;
+  ctx.fillStyle = bg; roundRect(x - w / 2, y - h / 2, w, h, 10); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x, y + 0.5);
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function drawZones(hover) {
+  const m = S.map; if (!m || !S.layers.zones) return;
+  const zs = m.zones || {};
+  const st = S.st && S.st.mission;
+  for (const z of ZORDER) {
+    const b = zs[z]; if (!b) continue;
+    const [x0, x1, y0, y1] = b;
+    const cur = st && st.zone === z && !st.done && !st.paused && !st.awaiting_command;
+    ctx.save();
+    ctx.setLineDash(z === hover ? [] : [6, 6]);
+    ctx.lineWidth = z === hover ? 2 : 1.2;
+    ctx.strokeStyle = z === hover ? 'rgba(56,189,248,.95)' : cur ? 'rgba(56,189,248,.55)' : 'rgba(148,163,184,.28)';
+    polyline([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], true); ctx.stroke();
+    if (z === hover) { ctx.fillStyle = 'rgba(56,189,248,.08)'; ctx.fill(); }
+    ctx.restore();
+    // label at the zone's far end (aisles) or middle (front/back)
+    const lx = (x0 + x1) / 2, ly = z.startsWith('aisle') ? y0 + 1.1 : (y0 + y1) / 2;
+    const p = toS(lx, ly);
+    label(ZNAME[z].toUpperCase(), p[0], p[1], { size: 11, weight: 700, color: cur ? '#7dd3fc' : 'rgba(203,213,225,.75)' });
+  }
+}
+const NS_ORDER = { walkway: 0, crossing_zone: 0, personal_space: 1, vehicle_keep: 1, predicted_path: 2, robot_path: 3, vehicle_path: 3, vehicle: 4, stop_line: 5, standing: 6, person: 6, label: 8, standing_label: 8, vehicle_label: 8, robot_decision: 9 };
+function drawShapes(shapes) {
+  if (!shapes || !shapes.length) return;
+  const list = shapes.slice().sort((a, b) => (NS_ORDER[a.ns] ?? 4) - (NS_ORDER[b.ns] ?? 4));
+  const s = S.view.s;
+  for (const sh of list) {
+    if (!S.layers.predict && (sh.ns === 'predicted_path' || sh.ns === 'robot_path' || sh.ns === 'vehicle_path' || sh.ns === 'walkway' || sh.ns === 'crossing_zone')) continue;
+    if (sh.ns === 'robot_decision') continue; // drawn with the robot
+    const c = sh.rgba || [1, 1, 1, 1];
+    if (sh.k === 'c') {
+      const p = toS(sh.x, sh.y), r = Math.max(3, sh.r * s);
+      if (sh.h != null && sh.h < 0.1) { // a flat disc: a ring of personal space
+        ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 2 * Math.PI); ctx.fillStyle = rgba(c, 0.6); ctx.fill();
+        ctx.strokeStyle = rgba(c, 2.2); ctx.lineWidth = 1.5; ctx.stroke();
+        continue;
+      }
+      // a body: glow + solid disc
+      const solid = [c[0], c[1], c[2], 1];
+      ctx.beginPath(); ctx.arc(p[0], p[1], r + 5, 0, 2 * Math.PI); ctx.fillStyle = rgba(solid, 0.18); ctx.fill();
+      ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 2 * Math.PI); ctx.fillStyle = rgba(solid, 0.92); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1.5; ctx.stroke();
+    } else if (sh.k === 'l' || sh.k === 'll') {
+      const wide = sh.w >= 0.3; // walkways and crossing zones are drawn as wide bands
+      ctx.save();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(wide ? 4 : 1.5, sh.w * s);
+      ctx.strokeStyle = rgba(c, wide ? 1.0 : 1.0);
+      if (sh.ns === 'predicted_path') { ctx.setLineDash([Math.max(3, 0.12 * s), Math.max(3, 0.1 * s)]); ctx.lineWidth = Math.max(2, 0.06 * s); }
+      if (sh.ns === 'stop_line') { ctx.lineWidth = Math.max(3, 0.1 * s); ctx.lineCap = 'butt'; }
+      if (sh.k === 'l') { polyline(sh.pts); ctx.stroke(); } else {
+        for (let i = 0; i + 1 < sh.pts.length; i += 2) { polyline([sh.pts[i], sh.pts[i + 1]]); ctx.stroke(); }
+      }
+      if (sh.ns === 'predicted_path' && sh.pts.length > 1) { // an arrow head at the end
+        const a = toS(...sh.pts[sh.pts.length - 2]), b = toS(...sh.pts[sh.pts.length - 1]);
+        const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), L = 7;
+        ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(b[0], b[1]);
+        ctx.lineTo(b[0] - L * Math.cos(ang - 0.5), b[1] - L * Math.sin(ang - 0.5));
+        ctx.lineTo(b[0] - L * Math.cos(ang + 0.5), b[1] - L * Math.sin(ang + 0.5)); ctx.closePath();
+        ctx.fillStyle = rgba(c); ctx.fill();
+      }
+      ctx.restore();
+    } else if (sh.k === 'b') {
+      const cx = sh.x, cy = sh.y, hw = sh.w / 2, hl = sh.l / 2, co = Math.cos(sh.yaw || 0), si = Math.sin(sh.yaw || 0);
+      const pts = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([a, b]) => [cx + co * a - si * b, cy + si * a + co * b]);
+      polyline(pts, true); ctx.fillStyle = rgba(c, 1.2); ctx.fill(); ctx.strokeStyle = rgba([c[0], c[1], c[2], 1]); ctx.lineWidth = 1.5; ctx.stroke();
+    } else if (sh.k === 'p') {
+      const r = Math.max(1.5, (sh.s || 0.05) * s / 2);
+      ctx.fillStyle = rgba(c);
+      for (const q of sh.pts) { const p = toS(q[0], q[1]); ctx.fillRect(p[0] - r, p[1] - r, 2 * r, 2 * r); }
+    } else if (sh.k === 'a') {
+      ctx.strokeStyle = rgba(c); ctx.lineWidth = Math.max(2, sh.w * s); polyline(sh.pts); ctx.stroke();
+    } else if (sh.k === 't') {
+      if (!S.layers.predict && sh.ns === 'label') continue;
+      const p = toS(sh.x, sh.y);
+      let t = sh.text || '', col = '#f1f5f9';
+      const pm = sh.ns === 'label' && /^person (\d+)\s+([\d.]+) m\/s(.*)$/.exec(t);
+      if (pm) {
+        const rest = pm[3];
+        t = `${s < 22 ? 'P' : 'person '}${pm[1]} · ${pm[2]} m/s` + (/robot waits/.test(rest) ? ' · waiting for them' : /not seen/.test(rest) ? ' · not seen now' : /along/.test(rest) ? ' · along its path' : '');
+        if (/robot waits/.test(rest)) col = '#fecaca';
+      } else if (sh.ns === 'vehicle_label' || sh.ns === 'standing_label') t = t.replace(/\s{2,}/g, ' · ');
+      labelAvoid(t, p[0], p[1] - 0.55 * s - 6, { size: 12, weight: 600, color: col });
+    }
+  }
+}
+function drawRobot(pose) {
+  if (!pose) return;
+  const s = S.view.s;
+  const g = S.st && S.st.guard;
+  const waiting = g && g.state === 'wait';
+  const p = toS(pose.x, pose.y);
+  // heading in screen space
+  const ahead = toS(pose.x + Math.cos(pose.yaw), pose.y + Math.sin(pose.yaw));
+  const ang = Math.atan2(ahead[1] - p[1], ahead[0] - p[0]);
+  // pulse ring
+  const t = performance.now() / 1000;
+  const pr = (0.55 + 0.25 * ((t * 0.8) % 1)) * s;
+  ctx.beginPath(); ctx.arc(p[0], p[1], pr, 0, 2 * Math.PI);
+  ctx.strokeStyle = waiting ? `rgba(239,68,68,${0.65 * (1 - ((t * 0.8) % 1))})` : `rgba(56,189,248,${0.45 * (1 - ((t * 0.8) % 1))})`;
+  ctx.lineWidth = 2; ctx.stroke();
+  // brush swath
+  ctx.save(); ctx.translate(p[0], p[1]); ctx.rotate(ang);
+  const L = 0.6 * s, Wd = 0.4 * s;
+  ctx.fillStyle = 'rgba(56,189,248,.10)'; ctx.fillRect(-0.05 * s, -0.32 * s, 0.1 * s, 0.64 * s);
+  roundRectAt(-L / 2, -Wd / 2, L, Wd, Math.min(8, 0.12 * s));
+  ctx.fillStyle = waiting ? '#b91c1c' : '#0284c7'; ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = '#e0f2fe'; ctx.stroke();
+  // front marker
+  ctx.beginPath(); ctx.moveTo(L / 2 + 2, 0); ctx.lineTo(L / 2 - Math.min(10, 0.16 * s), -Math.min(7, 0.12 * s)); ctx.lineTo(L / 2 - Math.min(10, 0.16 * s), Math.min(7, 0.12 * s)); ctx.closePath();
+  ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.restore();
+  // the guard's decision, when it is news
+  const dec = (S.st && S.st.shapes || []).find((x) => x.ns === 'robot_decision');
+  if (dec && dec.text && dec.text !== 'GO') {
+    pill(dec.text, p[0], p[1] - 0.75 * s - 12, waiting ? 'rgba(220,38,38,.95)' : 'rgba(22,163,74,.95)');
+  }
+}
+function roundRectAt(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+// v10.11: the robot's view. The lidar polygon (view_polygon on the VM): what it can see right now.
+function viewPath(v) {
+  const p0 = toS(v.pts[0][0], v.pts[0][1]); ctx.moveTo(p0[0], p0[1]);
+  for (let i = 1; i < v.pts.length; i++) { const p = toS(v.pts[i][0], v.pts[i][1]); ctx.lineTo(p[0], p[1]); }
+  ctx.closePath();
+}
+function drawView(v) {
+  if (!v || !S.layers.view || !v.pts || v.pts.length < 3) return;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(-10, -10, W + 20, H + 20); viewPath(v);
+  ctx.fillStyle = 'rgba(2,6,23,.5)'; ctx.fill('evenodd');                   // what it can't see: shaded
+  ctx.beginPath(); viewPath(v);
+  ctx.strokeStyle = 'rgba(125,211,252,.18)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
+}
+function inPoly(q, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > q[1]) !== (yj > q[1]) && q[0] < (xj - xi) * (q[1] - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+const isGrey = (c) => c && Math.abs(c[0] - c[1]) < 0.05 && Math.abs(c[1] - c[2]) < 0.05 && c[0] > 0.45 && c[0] < 0.75;
+// where everyone really is (the simulator), against what the robot knows of them
+function truthStatus(a, st) {
+  const veh = a.kind === 'vehicle', sh = st.shapes || [];
+  const near = (x, r) => x.x != null && Math.hypot(x.x - a.x, x.y - a.y) <= r;
+  if (sh.some((x) => (veh ? (x.ns === 'vehicle' || (x.ns === 'person' && !isGrey(x.rgba))) : ((x.ns === 'person' && !isGrey(x.rgba)) || x.ns === 'standing'))
+                     && near(x, veh ? 1.5 : 0.75))) return 'known';
+  if (!veh && sh.some((x) => x.ns === 'person' && isGrey(x.rgba) && near(x, 1.5))) return 'remembered';
+  const v = st.view;
+  if (!v || !v.pts) return 'unknown';
+  const d = Math.hypot(a.x - v.o[0], a.y - v.o[1]);
+  if (d > (v.r || 8)) return 'far';
+  const k = Math.max(0, d - (veh ? 0.9 : 0.45)) / Math.max(d, 1e-6);       // just in front of it, towards the lidar
+  return inPoly([v.o[0] + (a.x - v.o[0]) * k, v.o[1] + (a.y - v.o[1]) * k], v.pts) ? 'seen' : 'hidden';
+}
+const TRUTH_LOOK = { known: ['#4ade80', 'tracked'], remembered: ['#94a3b8', 'remembered, not seen just now'], seen: ['#fbbf24', 'in sight, not tracked yet'],
+  hidden: ['#a78bfa', 'hidden from its lidar'], far: ['#64748b', 'beyond its 8 m lidar'], unknown: ['#c4b5fd', ''] };
+function drawTruth(agents, st) {
+  if (!agents || !S.layers.truth) return;
+  const s = S.view.s, n = { known: 0, near: 0, hidden: 0 };
+  for (const a of agents) {
+    const stt = truthStatus(a, st), [col, what] = TRUTH_LOOK[stt];
+    if (stt === 'known') n.known++;
+    if (stt !== 'far' && stt !== 'unknown') n.near++;
+    if (stt === 'hidden') n.hidden++;
+    const p = toS(a.x, a.y);
+    ctx.save();
+    ctx.strokeStyle = col; ctx.globalAlpha = stt === 'far' ? 0.55 : 0.95; ctx.lineWidth = 1.6; ctx.setLineDash([4, 3]);
+    if (a.kind === 'vehicle' && a.L) {
+      const co = Math.cos(a.yaw), si = Math.sin(a.yaw), hl = a.L / 2, hw = a.W / 2;
+      polyline([[-hl, -hw], [hl, -hw], [hl, hw], [-hl, hw]].map(([u, v]) => [a.x + co * u - si * v, a.y + si * u + co * v]), true); ctx.stroke();
+      if (a.fork > 0) {
+        const fx = a.x + co * (hl + a.fork / 2), fy = a.y + si * (hl + a.fork / 2), fl = a.fork / 2, fw = 0.31;
+        polyline([[-fl, -fw], [fl, -fw], [fl, fw], [-fl, fw]].map(([u, v]) => [fx + co * u - si * v, fy + si * u + co * v]), true); ctx.stroke();
+      }
+    } else {
+      ctx.beginPath(); ctx.arc(p[0], p[1], Math.max(4, 0.25 * s), 0, 2 * Math.PI); ctx.stroke();
+    }
+    ctx.restore();
+    labelAvoid(what ? `${a.name} · ${what}` : a.name, p[0], p[1] + 0.45 * s + 8, { size: 11, weight: 600, color: col });
+  }
+  const txt = W < 560 ? `Truth: it knows ${n.known} of ${agents.length}` + (st.view ? ` · ${n.hidden} hidden` : '')
+    : `Simulator truth: the robot knows ${n.known} of ${agents.length}` + (st.view ? ` · ${n.near} within 8 m, ${n.hidden} hidden from it` : '');
+  ctx.save(); ctx.font = '600 12px system-ui, -apple-system, sans-serif';
+  const w = ctx.measureText(txt).width + 20;
+  roundRectAt(12, 12, w, 26, 8); ctx.fillStyle = 'rgba(15,23,42,.88)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(196,181,253,.6)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = '#e9d5ff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(txt, 22, 25.5); ctx.restore();
+}
+// someone it lost sight of: the guard keeps them a few seconds (grey); show where they might be by now
+const lostSince = {};
+function drawLost(shapes, now) {
+  const seen = new Set();
+  for (const sh of shapes || []) {
+    if (sh.ns !== 'person' || sh.k !== 'c' || !isGrey(sh.rgba)) continue;
+    seen.add(sh.id);
+    if (lostSince[sh.id] == null) lostSince[sh.id] = now;
+    const age = Math.max(0, now - lostSince[sh.id]), p = toS(sh.x, sh.y);
+    const r = (0.3 + Math.min(2.0, 1.2 * age)) * S.view.s;
+    ctx.save(); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.4;
+    ctx.strokeStyle = `rgba(148,163,184,${Math.max(0.25, 0.9 - 0.12 * age).toFixed(2)})`;
+    ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 2 * Math.PI); ctx.stroke(); ctx.restore();
+  }
+  for (const id of Object.keys(lostSince)) if (!seen.has(Number(id)) && !seen.has(id)) delete lostSince[id];
+}
+function drawHolds(holds) {
+  if (!holds || !S.layers.holds) return;
+  const s = S.view.s;
+  for (const h of holds) {
+    const p = toS(h[0], h[1]);
+    const r = Math.max(5, Math.min(1.1, 0.18 + 0.08 * Math.sqrt(Math.max(h[2], 0))) * s);
+    ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 2 * Math.PI);
+    ctx.fillStyle = h[3] ? 'rgba(239,68,68,.20)' : 'rgba(239,68,68,.10)'; ctx.fill();
+    ctx.strokeStyle = h[3] ? 'rgba(239,68,68,.95)' : 'rgba(239,68,68,.6)'; ctx.lineWidth = h[3] ? 2 : 1.2; ctx.stroke();
+    if (!h[3] && h[2] >= 2 && s > 18) labelAvoid(`${Math.round(h[2])} s`, p[0], p[1], { size: 10, weight: 700, color: '#fecaca' });
+  }
+}
+function drawScale() {
+  const s = S.view.s; const m = s >= 40 ? 1 : s >= 15 ? 2 : 5; const px = m * s;
+  const x = 18, y = H - 16;
+  ctx.strokeStyle = 'rgba(203,213,225,.7)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y); ctx.lineTo(x + px, y); ctx.lineTo(x + px, y - 5); ctx.stroke();
+  label(`${m} m`, x + px / 2, y - 10, { size: 11, color: '#cbd5e1' });
+}
+let hoverZone = null;
+function draw() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const st = S.st;
+  const pose = currentPose();
+  if (S.view.follow && pose) { S.view.cx = pose.x; S.view.cy = pose.y; }
+  placed = [];
+  if (pose) {
+    const p = toS(pose.x, pose.y), s = S.view.s;
+    placed.push([p[0] - 0.4 * s, p[1] - 0.4 * s, 0.8 * s, 0.8 * s]);              // the robot
+    const dec = (st && st.shapes || []).find((x) => x.ns === 'robot_decision');
+    if (dec && dec.text && dec.text !== 'GO') {
+      ctx.font = '700 12px system-ui, -apple-system, sans-serif';
+      const w = ctx.measureText(dec.text).width + 14;
+      placed.push([p[0] - w / 2, p[1] - 0.75 * s - 22, w, 20]);                 // its badge
+    }
+  }
+  if (S.map) drawGrid(S.mapImg);
+  if (S.layers.coverage) drawGrid(S.covImg);
+  if (S.layers.wet) drawCells(S.wetImg, S.wet);                       // v10.13
+  drawZones(hoverZone);
+  if (st) drawView(st.view);                                         // v10.11: the rest is shaded
+  // dock
+  if (S.map) { const d = toS(0, 0); ctx.strokeStyle = 'rgba(56,189,248,.7)'; ctx.lineWidth = 1.5; ctx.strokeRect(d[0] - 8, d[1] - 8, 16, 16); label('DOCK', d[0], d[1] + 17, { size: 9.5, weight: 700, color: 'rgba(125,211,252,.85)' }); }
+  if (S.layers.trail && S.trail.length > 1) {
+    ctx.save(); ctx.strokeStyle = 'rgba(56,189,248,.38)'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+    polyline(S.trail); ctx.stroke(); ctx.restore();
+  }
+  if (st) {
+    drawHolds(st.holds);
+    if (S.layers.plan && st.plan) { ctx.save(); ctx.setLineDash([7, 6]); ctx.strokeStyle = 'rgba(56,189,248,.9)'; ctx.lineWidth = 2; polyline(st.plan); ctx.stroke(); ctx.restore(); }
+    drawShapes(st.shapes);
+    drawLost(st.shapes, st.sim != null ? st.sim : Date.now() / 1000);
+    if (S.layers.lidar && st.scan) {
+      ctx.fillStyle = 'rgba(251,113,133,.9)';
+      const r = Math.max(1.2, Math.min(2.6, 0.035 * S.view.s));
+      for (const q of st.scan) { const p = toS(q[0], q[1]); ctx.fillRect(p[0] - r, p[1] - r, 2 * r, 2 * r); }
+    }
+    drawTruth(st.truth, st);
+  }
+  drawRobot(pose);
+  drawScale();
+  drawTimeline();
+  requestAnimationFrame(draw);
+}
+
+function drawTimeline() {
+  const tl = $('tl'), c = tl.getContext('2d');
+  const w = tl.width, h = tl.height;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, w, h);
+  const T = S.timeline; if (!T.length) return;
+  const span = 300, t1 = T[T.length - 1][0], t0 = t1 - span;
+  const cols = ['#334155', '#16a34a', '#d97706', '#dc2626'];
+  const x0 = 70 * DPR, ww = w - x0 - 10 * DPR;
+  for (let i = 0; i < T.length; i++) {
+    const a = T[i], b = T[i + 1];
+    if (a[0] < t0 && (!b || b[0] < t0)) continue;
+    const ta = Math.max(a[0], t0), tb = b ? b[0] : t1 + 0.25;
+    const xa = x0 + (ta - t0) / span * ww, xb = x0 + (tb - t0) / span * ww;
+    c.fillStyle = cols[a[1]]; c.fillRect(xa, 9 * DPR, Math.max(1, xb - xa + 0.5), h - 18 * DPR);
+  }
+  c.fillStyle = '#8b98aa'; c.font = `${11 * DPR}px system-ui, sans-serif`; c.textBaseline = 'middle';
+  c.fillText('last 5 min', 10 * DPR, h / 2);
+}
+
+// ------------------------------------------------------------------ status panel
+function zoneRows(m) {
+  const sw = (m && m.swept) || {}, part = (m && m.partial) || {}, cleaned = new Set((m && m.cleaned) || []);
+  const queue = new Set((m && m.queue) || []);
+  const now = m && !m.done && !m.paused && !m.awaiting_command ? m.zone : null;
+  return ZORDER.map((z) => {
+    let pct = sw[z];
+    if (pct == null) pct = cleaned.has(z) ? 100 : (part[z] || 0);
+    if (cleaned.has(z)) pct = Math.max(pct, sw[z] != null ? sw[z] : 100);
+    const state = cleaned.has(z) ? 'done' : z === now ? 'now' : queue.has(z) ? 'queued' : '';
+    const ptxt = cleaned.has(z) ? '✓ done' : z === now ? `${Math.round(pct)} %` : queue.has(z) ? 'next' : pct ? `${Math.round(pct)} %` : '';
+    const nm = { front: 'Front', back: 'Back' }[z] || ZNAME[z];
+    return `<div class="zrow ${state}" title="${ZNAME[z]}"><div class="n">${nm}</div><div class="bar"><span style="width:${clamp(pct, 0, 100)}%"></span></div><div class="p ${state === 'done' ? 'done' : ''}">${ptxt || '&nbsp;'}</div></div>`;
+  }).join('');
+}
+function headline(m, g) {
+  if (!m) return [S.linkOk ? 'Waiting for the robot…' : 'No connection', S.linkOk ? 'No job report yet (/mission_state). Is the cleaning running?' : 'The page cannot reach robot_web on the VM.', ''];
+  const tr = m.traffic || {};
+  const es = S.st && S.st.estop;
+  if (es && es.on) return ['Emergency stop', 'Held at zero speed by the safety gate' + (m.paused ? ', job paused' : '') + '. Release it (top right), then say “carry on”.', 'wait'];
+  if (m.awaiting_command) return ['Ready at the dock', 'Give it a job: say it, type it, or click a zone on the map.', ''];
+  if (m.paused) return ['Paused', 'Stopped as asked. Say “carry on” to continue.', 'wait'];
+  if (m.done) { const c = (m.cleaned || []).map((z) => ZSAY[z] || z); return ['Job done', `Cleaned ${c.length ? c.join(', ') : 'nothing end to end'}; ${fmt(m.coverage_pct, 0)} % of the whole floor.`, 'done']; }
+  if (m.safety_hold) return ['Holding still', 'The safety layer has gone quiet, so it will not move until it is back.', 'wait'];
+  if (m.nav2_down) return ['Holding still', 'Navigation (Nav2) is not taking goals; retrying every few seconds.', 'wait'];
+  const where = m.zone === 'home' ? 'Heading back to the dock' : `Cleaning ${ZSAY[m.zone] || m.zone}`;
+  if (tr.state === 'wait') return [`Waiting · ${where.toLowerCase()}`, cap1(tr.say || 'the safety layer is holding it') + (tr.for_s >= 2 ? ` (${Math.round(tr.for_s)} s)` : ''), 'wait'];
+  if (m.manoeuvre === 'unstick') return [where, 'Backing off a rack and turning to line up, then trying again.', ''];
+  if (m.manoeuvre === 'align') return [where, 'Turning on the spot to line up with the lane.', ''];
+  const lane = m.lane || {};
+  let sub = '';
+  if (lane.going_round) sub = 'Going round someone standing in the lane.';
+  else if (lane.blocked_ahead) sub = 'Something is standing in the lane ahead; stopped short of it.';
+  else if (tr.v_limit != null && tr.limit) sub = `Slowed to ${fmt(tr.v_limit)} m/s: ${tr.limit}.`;
+  else if (m.patching) sub = 'Going back over lane it had to leave.';
+  else if (lane.left_m != null) sub = `${fmt(lane.left_m)} m to the end of this lane.`;
+  else if (tr.say && tr.say !== 'clear') sub = cap1(tr.say) + '.';
+  return [where, sub, ''];
+}
+function renderStatus() {
+  const st = S.st; if (!st) return;
+  const m = st.mission, g = st.guard, r = st.robot;
+  const [h, sub, cls] = headline(m, g);
+  const he = $('headline'); he.textContent = h; he.className = 'headline ' + cls;
+  $('subline').textContent = sub;
+  $('goalinfo').textContent = m && m.total ? `waypoint ${m.goal} of ${m.total}` : '';
+  $('zones').innerHTML = zoneRows(m);
+  const tr = (m && m.traffic) || {};
+  const near = g ? g.person_m : tr.person_m;
+  const vlim = g ? g.v_limit : tr.v_limit;
+  const k = [
+    ['Floor cleaned', m ? `${fmt(m.coverage_pct, 1)}<small>%</small>` : '—', ''],
+    ['Driven', r ? `${fmt(r.dist, 0)}<small>m</small>` : '—', ''],
+    ['Speed', r ? `${fmt(r.v, 2)}<small>m/s</small>` : '—', vlim != null && r && r.v > 0.02 ? 'warnk' : ''],
+    ['Nearest person', near != null ? `${fmt(near, 1)}<small>m</small>` : 'none', near != null && near < 1.2 ? 'alert' : ''],
+    ['Stops for people', st.rewind && st.rewind.n ? `${st.rewind.n}<small>${rwk(st.rewind)}</small>`
+      : m ? `${m.holds || 0}<small>${m.held_s ? ' · ' + fmt(m.held_s, 0) + ' s in all' : ''}</small>` : '—', ''],
+    ['People · vehicles', g ? `${g.people}<small>·</small> ${g.vehicles}` : '—', ''],
+  ];
+  $('kpis').innerHTML = k.map(([l, v, c]) => `<div class="kpi ${c}"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
+  // the agent
+  const a = st.agent || {};
+  let ai = a.ok ? 'robot agent' : 'commands only';
+  if (a.model_up === false) ai += ' · model down';
+  ai += earReady() ? ' · ear: Whisper' : '';
+  if (a.busy) ai = 'thinking…';
+  const el = $('agentinfo');
+  el.textContent = ai;
+  el.style.color = a.model_up === false && !a.busy ? '#fca5a5' : '';
+  el.title = a.model_up === false ? (a.model_why || '') + ' — commands, why did you stop, how long and what do you see still work' : '';
+  $('foot').textContent = `robot_web ${st.version} · ${st.mode}${st.mode === 'replay' && st.replay ? ' of ' + st.replay.label : ''}`;
+  const F = st.feeds || {}, NAMES = [['map', 'map'], ['pose', 'robot pose (TF)'], ['mission', 'job (/mission_state)'], ['guard', 'safety layer'], ['markers', 'what it sees'], ['scan', 'lidar'], ['plan', 'path'], ['coverage', 'coverage_recorder'], ['camera', 'camera'], ['truth', 'traffic truth']];
+  $('feeds').innerHTML = 'Feeds: ' + NAMES.map(([k, n]) => {
+    const a = F[k];
+    const ok = a != null && (k === 'map' || a < 5);
+    return `<span style="color:${ok ? '#86efac' : a == null ? '#5d6a7c' : '#fcd34d'}">${ok ? '✓' : a == null ? '–' : '!'} ${n}</span>`;
+  }).join(' · ') + (st.cov_src ? ` · floor painted from ${st.cov_src === 'recorder' ? 'coverage_recorder' : 'the robot pose'}` : '');
+}
+function renderDecision() {
+  const st = S.st, d = $('decision');
+  const g = st && st.guard, m = st && st.mission;
+  let cls = 'idle', v = 'Waiting for the robot…', s = '';
+  const stale = g && st.guard_age != null && st.guard_age > 3 && !st.frozen && st.mode === 'live';
+  if (st && st.estop && st.estop.on) { cls = 'wait'; v = 'EMERGENCY STOP'; s = 'Every velocity command is held at zero by the safety gate (guard_gate), whatever Nav2 or the guard want' + (st.estop.for_s != null ? ` · ${Math.round(st.estop.for_s)} s` : ''); }
+  else if (!g || stale) { cls = 'idle'; v = g ? 'Safety layer silent' : 'No word from the safety layer yet'; s = g ? `last report ${fmt(st.guard_age, 0)} s ago` : ''; }
+  else {
+    const busy = m && !(m.done || m.paused || m.awaiting_command);
+    if (g.state === 'wait') { cls = busy ? 'wait' : 'idle'; v = g.why === 'emergency' ? 'STOPPED · emergency' : g.why === 'vehicle' ? 'Giving way to a vehicle' : 'Waiting for a person'; s = cap1(g.say || ''); }
+    else if (g.v_limit != null && g.v_limit < 0.75) { cls = 'slow'; v = `Going slowly · ${fmt(g.v_limit)} m/s`; s = cap1(g.say || ''); }
+    else {
+      cls = 'go';
+      v = g.why === 'crossing' || g.why === 'committed' ? 'Crossing a walkway' : g.why === 'clearing' ? 'Leaving a walkway' : g.why === 'approach' ? 'Approaching a walkway' : g.why === 'in_way' ? "Moving out of someone's way" : 'Clear to go';
+      const seen = g.people ? `${g.people} ${g.people === 1 ? 'person' : 'people'} in view${g.person_m != null ? `, nearest ${fmt(g.person_m)} m` : ''}` : 'No one in view';
+      s = g.say && g.say !== 'clear' && cap1(g.say).toLowerCase() !== v.toLowerCase() ? `${cap1(g.say)} · ${seen.toLowerCase()}` : seen;
+    }
+    if (!busy && g.state !== 'wait') { cls = 'idle'; }
+  }
+  d.className = 'decision ' + cls;
+  d.innerHTML = `<div class="k">Safety layer · people guard${g && g.version ? ' ' + esc(g.version) : ''} · decides 10 times a second from the lidar</div><div class="v">${esc(v)}</div><div class="s">${esc(s)}</div>`;
+  // banner
+  const b = $('banner');
+  let msg = '', estop = false;
+  if (!S.linkOk) msg = 'Lost the robot page on the VM. Is the web tab (robot_web.py) still running?';
+  else if (st && st.estop && st.estop.on) { estop = true; msg = `EMERGENCY STOP${st.estop.by === 'someone else' ? ' (pressed outside this page)' : ''}: the robot is held at zero speed. Release it with the button top right, then say “carry on”.`; }
+  else if (st && st.frozen && st.mode === 'live') msg = 'The simulation has not moved for a while: Gazebo paused, or the computer busy or asleep. Not the robot.';
+  b.textContent = msg; b.hidden = !msg; b.classList.toggle('estop', estop);
+}
+function renderLink() {
+  const st = S.st;
+  const dot = $('linkdot');
+  dot.className = 'dot ' + (!S.linkOk ? 'down' : st && st.mode === 'replay' ? 'replay' : 'live');
+  const pm = $('pill-mode');
+  if (!S.linkOk) { pm.innerHTML = '<b>offline</b>'; pm.className = 'pill bad'; }
+  else if (st && st.mode === 'replay') { pm.innerHTML = `<b>REPLAY</b> ${esc(st.replay ? st.replay.label : '')}`; pm.className = 'pill'; }
+  else { pm.innerHTML = '<b>LIVE</b>'; pm.className = 'pill ok'; }
+  if (st) {
+    $('pill-sim').innerHTML = `sim <b>${mmss(st.sim)}</b>${st.rtf != null ? ` · ${fmt(st.rtf, 2)}× real time` : ''}`;
+    const a = st.agent || {};
+    const pmod = $('pill-model');
+    if (a.model_up === true) { pmod.innerHTML = `model <b>${esc(a.model)}</b> up`; pmod.className = 'pill hide-s ok'; }
+    else if (a.model_up === false) { pmod.innerHTML = `model <b>down</b>`; pmod.title = a.model_why || ''; pmod.className = 'pill hide-s bad'; }
+  }
+}
+function renderReplay() {
+  const st = S.st, rb = $('replaybar');
+  const r = st && st.replay;
+  if (!r || st.mode !== 'replay') { rb.hidden = true; return; }
+  rb.hidden = false;
+  const sl = $('rp-slider');
+  sl.min = r.t0; sl.max = r.t1;
+  if (!S.sliding && r.t != null) sl.value = r.t;
+  $('rp-lbl').textContent = `${mmss(r.t)} / ${mmss(r.t1)} · guard ${r.guard}`;
+  $('rp-play').textContent = r.paused ? '▶' : '⏸';
+  const sp = $('rp-speed'); if (document.activeElement !== sp) sp.value = String(r.speed);
+}
+let camTimer = null;
+function renderCamera() {
+  const st = S.st, cam = $('cam');
+  const want = !!(st && st.camera && S.layers.camera);
+  if (want === S.camOn) return;
+  S.camOn = want; cam.hidden = !want;
+  if (want) { camTick(); } else if (camTimer) { clearTimeout(camTimer); camTimer = null; }
+}
+function camTick() {
+  if (!S.camOn) return;
+  const img = $('camimg');
+  const nxt = new Image();
+  nxt.onload = () => { img.src = nxt.src; camTimer = setTimeout(camTick, 350); };
+  nxt.onerror = () => { camTimer = setTimeout(camTick, 1500); };
+  nxt.src = `/api/camera.jpg?t=${Date.now()}`;
+}
+
+// ------------------------------------------------------------------ conversation
+const chat = $('chat');
+function addMsg(kind, html, id) {
+  const e = $('chat-empty'); if (e) e.remove();
+  const d = document.createElement('div');
+  d.className = 'msg ' + kind;
+  if (id) d.dataset.id = id;
+  d.innerHTML = html;
+  chat.appendChild(d);
+  while (chat.children.length > 80) chat.removeChild(chat.firstChild);
+  chat.scrollTop = chat.scrollHeight;
+  return d;
+}
+function sentTag(ev) {
+  if (!ev.sent) return '';
+  const steps = ev.sent.steps || [ev.sent];
+  const txt = steps.map((s) => `${s.action}${(s.zones || []).length ? ' ' + s.zones.join(', ') : ''}`).join(' → ');
+  if (S.st && S.st.mode === 'replay') return `<span class="tag no">replay: not sent (${esc(txt)})</span>`;
+  return ev.delivered === false ? `<span class="tag no">not delivered: ${esc(txt)}</span>` : `<span class="tag">sent to the robot: ${esc(txt)}</span>`;
+}
+function rwk(rw) {                       // v10.14: how many stops mattered (Rewind)
+  if (!rw || !rw.n) return '';
+  return ` · ${rw.hit + rw.near} mattered`;
+}
+function viaText(v) { return { voice: '🎤 spoken', whisper: '🎤 spoken · Whisper', typed: 'typed', map: 'clicked on the map', chip: 'quick button', button: 'STOP button', terminal: 'talk tab', web: 'another web page' }[v] || v || ''; }
+function handleEvent(ev, historic) {
+  if (ev.kind === 'you') {
+    const heard = ev.heard ? ` → “${esc(ev.heard)}”` : '';
+    addMsg('you', `${esc(ev.text)}<span class="meta">${esc(viaText(ev.via))}${heard}</span>`);
+  } else if (ev.kind === 'robot') {
+    const pend = ev.id && chat.querySelector(`.msg.thinking[data-id="${ev.id}"]`);
+    if (pend) pend.remove();
+    const ch = (ev.choices || []).map(([l, t]) => `<button class="chip" data-t="${esc(t)}"${historic ? ' disabled' : ''}>${esc(l)}</button>`).join('');
+    addMsg('robot', `${esc(ev.text)}${sentTag(ev) ? '<br>' + sentTag(ev) : ''}${ev.via === 'terminal' ? '<span class="meta">from the talk tab</span>' : ev.via === 'web' ? '<span class="meta">from another web page</span>' : ''}${ch ? `<div class="chips pick">${ch}</div>` : ''}`);
+    if (!historic && S.voice >= 1) speak(ev.text, true);
+  } else if (ev.kind === 'say') {
+    addSay(ev.text, ev.sim, false);
+    if (!historic && S.voice >= 2) speak(ev.text, false);
+  } else if (ev.kind === 'replay') {
+    addSay(ev.text, ev.sim, true);
+  } else if (ev.kind === 'rewind' && ev.id != null) {          // v10.14: the robot offers to act a stop out in 3D
+    addMsg('robot', `<a class="chip" href="/twin?rewind=${encodeURIComponent(ev.id)}" target="_blank" rel="noopener">⏪ Watch it in 3D</a>`);
+  }
+}
+function addSay(text, sim, sys) {
+  const f = $('says');
+  const e = f.querySelector('.empty'); if (e) e.remove();
+  const d = document.createElement('div');
+  d.className = 'l' + (sys ? ' sys' : '');
+  d.innerHTML = `<span class="t">${sim != null ? mmss(sim) : ''}</span><span>${esc(text)}</span>`;
+  f.appendChild(d);
+  while (f.children.length > 120) f.removeChild(f.firstChild);
+  f.scrollTop = f.scrollHeight;
+}
+async function send(text, via, alts) {
+  text = (text || '').trim();
+  if (!text) return;
+  try {
+    const r = await fetch('/api/talk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, via, alts: alts || [] }) });
+    const j = await r.json();
+    if (j.id) {
+      const d = addMsg('robot thinking', '<span class="dots"><span></span><span></span><span></span></span>', j.id);
+      setTimeout(() => d.remove(), 120000);
+    }
+  } catch (e) { addMsg('robot', 'I could not reach the robot page on the VM.'); }
+}
+$('talkform').addEventListener('submit', (e) => { e.preventDefault(); const i = $('talk'); const t = i.value; i.value = ''; send(t, S.fromVoice ? 'voice' : 'typed'); S.fromVoice = false; });
+const CHIPS = [['Introduce yourself', 'introduce yourself'], ['Clean aisle 1', 'clean aisle 1'], ['Why did you stop?', 'why did you stop?'], ['What do you see?', 'what do you see?'], ['How long left?', 'how long will it take?'], ['Closest call?', 'show me your closest call'], ['Carry on', 'carry on'], ['Go home', 'go home']];
+$('chips').innerHTML = CHIPS.map(([l, t]) => `<button class="chip" data-t="${esc(t)}">${esc(l)}</button>`).join('');
+$('chips').addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (b) send(b.dataset.t, 'chip'); });
+chat.addEventListener('click', (e) => {         // v10.10b: the buttons under 'which zone?'
+  const b = e.target.closest('.pick .chip');
+  if (!b || b.disabled) return;
+  b.closest('.pick').querySelectorAll('.chip').forEach((x) => { x.disabled = true; });
+  b.classList.add('on');
+  send(b.dataset.t, 'chip');
+});
+$('btn-stop').addEventListener('click', async () => {
+  const b = $('btn-stop');
+  const on = !!(S.st && S.st.estop && S.st.estop.on);
+  b.classList.remove('flash'); void b.offsetWidth; if (!on) b.classList.add('flash');
+  if (!on) { S.st = S.st || {}; S.st.estop = { on: true }; renderStopBtn(); }   // show it pressed at once
+  try { await fetch(on ? '/api/release' : '/api/stop', { method: 'POST' }); }
+  catch (e) { addMsg('robot', 'That did not reach the VM. In a VM terminal: ros2 topic pub --once /emergency_stop std_msgs/msg/Bool "{data: true}"'); }
+});
+function renderStopBtn() {
+  const on = !!(S.st && S.st.estop && S.st.estop.on);
+  const b = $('btn-stop');
+  b.textContent = on ? 'RELEASE' : 'STOP';
+  b.classList.toggle('held', on);
+  b.title = on ? "Release the emergency stop (the job stays paused until you say 'carry on')" : 'Emergency stop: the safety gate holds the robot at zero speed and the job pauses (no model involved)';
+}
+
+// ------------------------------------------------------------------ voice out
+let voices = [];
+function loadVoices() {
+  voices = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+  const sel = $('set-voice');
+  const en = voices.filter((v) => /^en/i.test(v.lang));
+  const want = store.get('voiceName', null);
+  const pick = (want && en.find((v) => v.name === want)) || en.find((v) => /Premium|Enhanced/i.test(v.name))
+    || en.find((v) => /Google UK English (Female|Male)/i.test(v.name)) || en.find((v) => /Karen|Daniel|Serena|Samantha|Arthur|Martha/i.test(v.name))
+    || en.find((v) => v.lang === 'en-AU') || en[0];
+  sel.innerHTML = en.map((v) => `<option value="${esc(v.name)}" ${pick && v.name === pick.name ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('') || '<option>no voices</option>';
+}
+if (window.speechSynthesis) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+$('set-voice').addEventListener('change', (e) => store.set('voiceName', e.target.value));
+let sayQueue = 0;
+function speak(text, important) {
+  if (!window.speechSynthesis || !text) return;
+  if (S.listening) return;                       // never talk over the microphone
+  if (!important && sayQueue >= 2) return;       // commentary never piles up
+  const u = new SpeechSynthesisUtterance(text.replace(/\bm\/s\b/g, 'metres a second').replace(/(\d)\s?m\b/g, '$1 metres').replace(/ s\b/g, ' seconds').replace(/%/g, ' percent').replace(/_/g, ' '));
+  const v = voices.find((x) => x.name === $('set-voice').value);
+  if (v) { u.voice = v; u.lang = v.lang; }
+  u.rate = parseFloat($('set-rate').value) || 1;
+  sayQueue++;
+  u.onend = u.onerror = () => { sayQueue = Math.max(0, sayQueue - 1); };
+  speechSynthesis.speak(u);
+}
+function renderVoice() {
+  const b = $('btn-voice');
+  b.innerHTML = ['🔇 <span class="t">Voice off</span>', '🔈 <span class="t">Voice: replies</span>', '🔊 <span class="t">Voice: replies + commentary</span>'][S.voice];
+  b.classList.toggle('on', S.voice > 0);
+}
+$('btn-voice').addEventListener('click', () => {
+  S.voice = (S.voice + 1) % 3; store.set('voice', S.voice); renderVoice();
+  if (window.speechSynthesis) {
+    speechSynthesis.cancel(); sayQueue = 0;
+    if (S.voice === 1) speak('Voice on. I will read out my replies.', true);
+    if (S.voice === 2) speak('I will also say what I am doing as it happens.', true);
+  }
+});
+renderVoice();
+
+// ------------------------------------------------------------------ voice in
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+function micNote(html) { $('micnote').innerHTML = html; }
+const MIC_HELP = `The microphone needs this page from <b>localhost</b>. On the Mac: <a href="/mac.py" download>get mac_web.py</a>, run <code>python3 mac_web.py</code>, then open <code>http://localhost:8080</code> in Chrome or Safari. Meanwhile: click the box and use the Mac's dictation (🎤 key, or Fn twice).`;
+if (!SR) { $('mic').classList.add('unavail'); }
+else if (!window.isSecureContext) { $('mic').classList.add('unavail'); }
+// v10.11: Whisper on this Mac (ear_server.py, 127.0.0.1:8766). The page records, the ear writes it down.
+const EAR = 'http://127.0.0.1:8766';
+S.ear = { ok: false, model: null, checked: 0 };
+function earReady() { return S.ear.ok && store.get('ear', 'auto') !== 'browser' && !!(navigator.mediaDevices && window.MediaRecorder); }
+async function checkEar() {
+  if (!window.isSecureContext) return;                       // the mic needs localhost anyway
+  try {
+    const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), 1500);
+    const j = await (await fetch(EAR + '/health', { signal: ctl.signal })).json(); clearTimeout(tm);
+    S.ear = { ok: !!j.ok, model: j.model, checked: Date.now() };
+  } catch (e) { S.ear = { ok: false, model: null, checked: Date.now() }; }
+  $('earnote').innerHTML = S.ear.ok ? `Whisper (${esc(S.ear.model || '?')}) is listening on this Mac: speech is written down here, not in the cloud.`
+    : 'Whisper is not running on this Mac, so the browser recognises speech. For better hearing: <a href="/ear.py" download>get ear_server.py</a>, then once <code>~/eye/env/bin/python -m venv ~/ear &amp;&amp; ~/ear/bin/pip install faster-whisper "av&lt;19"</code>, and <code>~/ear/bin/python ~/ear_server.py</code> (run sheet step 3b).';
+}
+checkEar(); setInterval(checkEar, 20000);
+$('set-ear').value = store.get('ear', 'auto');
+$('set-ear').addEventListener('change', (e) => { store.set('ear', e.target.value); checkEar(); });
+async function hearWithWhisper() {
+  if (window.speechSynthesis) { speechSynthesis.cancel(); sayQueue = 0; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } }); }
+  catch (e) { micNote(e.name === 'NotAllowedError' ? 'The browser blocked the microphone: allow it for this page (address bar), then try again.' : 'Microphone: ' + e.message); return; }
+  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find((m) => MediaRecorder.isTypeSupported(m)) || '';
+  const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  const chunks = [];
+  const AC = window.AudioContext || window.webkitAudioContext, ac = new AC();
+  const an = ac.createAnalyser(); an.fftSize = 1024; ac.createMediaStreamSource(stream).connect(an);
+  const buf = new Float32Array(an.fftSize), t0 = performance.now();
+  let spoke = false, quietSince = t0, noise = 0.004, nNoise = 0;
+  const mic = $('mic');
+  const tick = () => {
+    if (mr.state !== 'recording') return;
+    an.getFloatTimeDomainData(buf);
+    let e = 0; for (let i = 0; i < buf.length; i++) e += buf[i] * buf[i];
+    const rms = Math.sqrt(e / buf.length), now = performance.now();
+    if (now - t0 < 300) { noise = (noise * nNoise + rms) / (nNoise + 1); nNoise++; }   // the room, before you speak
+    const thr = Math.max(0.012, noise * 3);
+    if (rms > thr) { spoke = true; quietSince = now; }
+    mic.style.boxShadow = `0 0 0 ${(2 + Math.min(1, rms / (thr * 4)) * 12).toFixed(1)}px rgba(239,68,68,.35)`;
+    if ((spoke && now - quietSince > 900) || (!spoke && now - t0 > 6000) || now - t0 > 12000) { mr.stop(); return; }
+    setTimeout(tick, 40);
+  };
+  mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  mr.onstart = () => { S.listening = true; S.mr = mr; mic.classList.add('listening'); micNote('Listening… speak now (Whisper on this Mac). It stops when you do.'); tick(); };
+  mr.onstop = async () => {
+    stream.getTracks().forEach((t) => t.stop()); try { ac.close(); } catch (e) { /* closed */ }
+    S.listening = false; S.mr = null; mic.classList.remove('listening'); mic.style.boxShadow = '';
+    if (!spoke) { micNote('Did not hear anything. Click 🎤 and speak straight away.'); return; }
+    micNote('Writing down what you said…');
+    try {
+      const blob = new Blob(chunks, { type: mr.mimeType || mime || 'audio/webm' });
+      const r = await fetch(EAR + '/hear', { method: 'POST', headers: { 'Content-Type': blob.type || 'application/octet-stream' }, body: blob });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      if (!j.text) { micNote("Didn't catch any words. Click 🎤 and try again."); return; }
+      micNote(j.unsure ? `Not sure I heard that right (“${esc(j.text)}”): if it's wrong, say it again or tap a button.` : '');
+      send(j.text, 'whisper', []);
+    } catch (e) {
+      S.ear.ok = false;
+      micNote(`The ear on this Mac did not answer (${esc(e.message)}): the next 🎤 uses the browser's recognition.`);
+    }
+  };
+  try { mr.start(250); } catch (e) { micNote('Microphone: ' + e.message); stream.getTracks().forEach((t) => t.stop()); }
+}
+$('mic').addEventListener('click', () => {
+  if (S.listening && S.mr) { S.mr.stop(); return; }           // v10.11: recording for Whisper: click again = done
+  if (window.isSecureContext && earReady()) { hearWithWhisper(); return; }
+  if (!SR) { micNote('This browser has no speech recognition: use Chrome or Safari. ' + MIC_HELP); return; }
+  if (!window.isSecureContext) { micNote(MIC_HELP); return; }
+  if (S.listening && rec) { rec.stop(); return; }
+  if (window.speechSynthesis) { speechSynthesis.cancel(); sayQueue = 0; }
+  rec = new SR();
+  rec.lang = $('set-lang').value || 'en-IN';
+  rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 5;
+  const input = $('talk');
+  let finalText = '', alts = [];
+  rec.onstart = () => { S.listening = true; $('mic').classList.add('listening'); micNote('Listening… speak now.'); };
+  rec.onresult = (e) => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) { finalText += r[0].transcript; alts = Array.from(r).slice(1).map((a) => a.transcript); }
+      else interim += r[0].transcript;
+    }
+    input.value = (finalText + interim).trim();
+  };
+  rec.onerror = (e) => {
+    const why = {
+      'not-allowed': 'The browser blocked the microphone: allow it for this page (address bar), then try again.',
+      'service-not-allowed': "Speech recognition is off here: on the Mac turn on Dictation (System Settings, Keyboard), or use Chrome.",
+      'audio-capture': 'No microphone found: check the Mac\'s sound input.',
+      'network': 'Speech recognition needs the internet (the browser sends the audio to be recognised).',
+      'no-speech': 'Did not catch anything. Click 🎤 and speak straight away.',
+    }[e.error];
+    micNote(why || `Microphone: ${e.error}`);
+  };
+  rec.onend = () => {
+    S.listening = false; $('mic').classList.remove('listening');
+    const t = (finalText || input.value).trim();
+    if (t) { input.value = ''; micNote(''); send(t, 'voice', alts); } else if (!$('micnote').textContent || $('micnote').textContent.startsWith('Listening')) micNote('Did not catch that. Click 🎤 and try again.');
+  };
+  try { rec.start(); } catch (e) { micNote('Microphone: ' + e.message); }
+});
+$('set-lang').value = store.get('lang2', 'en-IN');
+$('set-lang').addEventListener('change', (e) => store.set('lang2', e.target.value));
+$('set-rate').value = String(store.get('rate', 1));
+$('set-rate').addEventListener('change', (e) => store.set('rate', parseFloat(e.target.value)));
+$('btn-settings').addEventListener('click', () => { const s = $('settings'); s.hidden = !s.hidden; if (!s.hidden) s.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+
+// ------------------------------------------------------------------ map interaction
+let drag = null;
+cvs.addEventListener('pointerdown', (e) => {
+  cvs.setPointerCapture(e.pointerId);
+  drag = { x: e.offsetX, y: e.offsetY, cx: S.view.cx, cy: S.view.cy, moved: false };
+});
+cvs.addEventListener('pointermove', (e) => {
+  if (drag) {
+    const dx = e.offsetX - drag.x, dy = e.offsetY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) { drag.moved = true; cvs.classList.add('dragging'); S.view.follow = false; $('btn-follow').classList.remove('on'); S.view.userMoved = true; }
+    if (drag.moved) {
+      const v = S.view;
+      if (v.rot === 1) { v.cy = drag.cy - dx / v.s; v.cx = drag.cx - dy / v.s; } else { v.cx = drag.cx - dx / v.s; v.cy = drag.cy + dy / v.s; }
+    }
+    return;
+  }
+  const z = zoneAt(e.offsetX, e.offsetY);
+  if (z !== hoverZone) { hoverZone = z; cvs.classList.toggle('zonehover', !!z); }
+});
+cvs.addEventListener('pointerup', (e) => {
+  const d = drag; drag = null; cvs.classList.remove('dragging');
+  if (d && !d.moved) { const z = zoneAt(e.offsetX, e.offsetY); if (z) openZone(z, e.offsetX, e.offsetY); else closeZone(); }
+});
+cvs.addEventListener('pointerleave', () => { if (!drag) { hoverZone = null; cvs.classList.remove('zonehover'); } });
+cvs.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const v = S.view;
+  const before = toW(e.offsetX, e.offsetY);
+  v.s = clamp(v.s * Math.pow(1.0015, -e.deltaY), 4, 400);
+  const after = toW(e.offsetX, e.offsetY);
+  v.cx += before[0] - after[0]; v.cy += before[1] - after[1];
+  v.userMoved = true;
+}, { passive: false });
+cvs.addEventListener('dblclick', () => { S.view.userMoved = false; fit(); });
+function zoneAt(sx, sy) {
+  if (!S.map || !S.layers.zones) return null;
+  const [x, y] = toW(sx, sy);
+  let best = null, area = 1e9;
+  for (const [z, b] of Object.entries(S.map.zones || {})) {
+    if (x >= b[0] && x <= b[1] && y >= b[2] && y <= b[3]) { const a = (b[1] - b[0]) * (b[3] - b[2]); if (a < area) { area = a; best = z; } }
+  }
+  return best;
+}
+let zoneOpen = null;
+function openZone(z, sx, sy) {
+  zoneOpen = z;
+  const p = $('zonepop');
+  $('zp-t').textContent = `Clean ${ZSAY[z]}`;
+  const m = S.st && S.st.mission;
+  const done = m && (m.cleaned || []).includes(z);
+  $('zp-d').textContent = done ? 'Already cleaned on this job; it will go over it again.' : (m && !m.awaiting_command && !m.done && !m.paused) ? 'This replaces the job it is doing now.' : 'Sends the robot there now (same as saying it).';
+  p.hidden = false;
+  const r = $('mapbox').getBoundingClientRect();
+  p.style.left = Math.min(sx + 12, r.width - 250) + 'px';
+  p.style.top = Math.min(sy + 12, r.height - 150) + 'px';
+}
+function closeZone() { $('zonepop').hidden = true; zoneOpen = null; }
+$('zp-x').addEventListener('click', closeZone);
+$('zp-go').addEventListener('click', () => { if (zoneOpen) send(`clean ${ZSAY[zoneOpen]}`, 'map'); closeZone(); });
+$('btn-fit').addEventListener('click', () => { S.view.userMoved = false; S.view.follow = false; $('btn-follow').classList.remove('on'); fit(); });
+$('btn-rot').addEventListener('click', () => { S.view.autoRot = false; S.view.rot = S.view.rot === 1 ? 0 : 1; store.set('rot', S.view.rot); S.view.userMoved = false; fit(); });
+$('btn-follow').addEventListener('click', () => { S.view.follow = !S.view.follow; $('btn-follow').classList.toggle('on', S.view.follow); if (S.view.follow) S.view.s = Math.max(S.view.s, 55); });
+$('btn-layers').addEventListener('click', (e) => { e.stopPropagation(); $('layers').classList.toggle('open'); });
+document.addEventListener('click', (e) => { if (!e.target.closest('#layers') && !e.target.closest('#btn-layers')) $('layers').classList.remove('open'); });
+for (const cb of document.querySelectorAll('#layers input[data-layer]')) {
+  const k = cb.dataset.layer;
+  cb.checked = !!S.layers[k];
+  cb.addEventListener('change', () => { S.layers[k] = cb.checked; store.set('layers', S.layers); applyLayers(); });
+}
+function applyLayers() { $('legend').classList.toggle('hidden', !S.layers.legend); renderCamera(); }
+$('cam').addEventListener('click', () => $('cam').classList.toggle('big'));
+
+// replay controls
+async function replayCtl(body) { try { await fetch('/api/replay', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); } catch (e) { /* ignore */ } }
+$('rp-play').addEventListener('click', () => { const r = S.st && S.st.replay; replayCtl({ cmd: r && r.paused ? 'play' : 'pause' }); });
+$('rp-speed').addEventListener('change', (e) => replayCtl({ cmd: 'speed', value: parseFloat(e.target.value) }));
+$('rp-slider').addEventListener('input', () => { S.sliding = true; });
+$('rp-slider').addEventListener('change', (e) => { S.sliding = false; replayCtl({ cmd: 'seek', value: parseFloat(e.target.value) }); });
+
+// ------------------------------------------------------------------ start
+window.addEventListener('resize', resize);
+if (window.ResizeObserver) { const ro = new ResizeObserver(() => resize()); ro.observe($('mapbox')); ro.observe($('tl').parentElement); }
+if (S.view.rot !== null && S.view.rot !== undefined) S.view.autoRot = false;
+applyLayers();
+resize();
+poll();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
