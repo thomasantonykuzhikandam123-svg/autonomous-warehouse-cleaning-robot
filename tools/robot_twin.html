@@ -96,6 +96,17 @@ body.rewinding #statebox, body.rewinding #truthbadge { display: none !important;
 .lab.rw { background: rgba(90,8,24,.92); border-color: #fb3b5c; color: #fff; font-size: 14px; font-weight: 700; box-shadow: 0 0 22px rgba(251,59,92,.5); }
 .lab.rwok { background: rgba(6,60,40,.9); border-color: #34d399; color: #eafff5; font-size: 14px; font-weight: 700; }
 .lab.rwthen { background: rgba(10,16,26,.88); border-color: rgba(226,232,240,.6); color: #e2e8f0; }
+/* v10.14c: the robot's camera, with the people YOLO found (shown only while pictures arrive: live, camera on) */
+#camwin { right: 16px; bottom: 70px; width: min(280px, 30vw); border-radius: 10px; overflow: hidden; background: #000; display: none;
+  border: 1px solid var(--edge); box-shadow: 0 8px 26px rgba(0,0,0,.55); cursor: zoom-in; }
+#camwin.on { display: block; }
+#camwin.big { width: min(640px, 62vw); cursor: zoom-out; }
+#camwin img { display: block; width: 100%; height: auto; min-height: 60px; }
+#camwin .cap { position: absolute; left: 0; right: 0; top: 0; padding: 4px 9px; font-size: 11px; font-weight: 700; letter-spacing: .08em;
+  color: #dbe7f3; background: linear-gradient(180deg, rgba(0,0,0,.8), transparent); pointer-events: none; }
+body.cinema #camwin { top: 16px; bottom: auto; }
+body.rewinding #camwin { display: none !important; }
+@media (max-width: 820px) { #camwin, body.cinema #camwin { top: 170px; bottom: auto; right: 8px; width: 38vw; } #camwin.big { width: 92vw; } }
 @media (max-width: 1440px) { #brand .s { display: none; } .sub { font-size: 18px; } }
 @media (max-width: 1100px) { #subs { width: 92vw; bottom: 150px; } #legend { display: none; } }
 body.cinema #truthbadge { top: 96px; }
@@ -120,7 +131,7 @@ body.cinema #truthbadge { top: 96px; }
   <div class="row"><button class="b" data-cam="auto" title="A">Auto camera</button><button class="b" data-cam="chase" title="C">Chase</button><button class="b" data-cam="top" title="T">Top</button><button class="b" data-cam="orbit" title="O">Orbit</button></div>
   <div class="row"><button class="b" data-tog="ghosts" title="G">Imagined futures</button><button class="b" data-tog="sight" title="S">Line of sight</button><button class="b" data-tog="truth" title="V">Simulator truth</button><button class="b" data-tog="labels" title="L">Labels</button><button class="b" data-tog="glow" title="B: the glow (switch off on a slow computer)">Glow</button></div>
   <div class="row"><button class="b" id="btn-closest" title="Shift+R: the stop that mattered most, acted out: what would have happened if it had not stopped">⏪ Closest call</button><button class="b" id="btn-last" title="R: the last stop for a person, acted out (Esc ends it)">⏪ Last stop</button></div>
-  <div class="row"><button class="b" data-tog="wet" title="W: where the floor is still wet, and where it cleaned dry">Wet floor</button><button class="b" data-tog="habits" title="P: where people walk, as the robot has learned it from what it saw">Where people walk</button></div>
+  <div class="row"><button class="b" data-tog="wet" title="W: where the floor is still wet, and where it cleaned dry">Wet floor</button><button class="b" data-tog="habits" title="P: where people walk, as the robot has learned it from what it saw">Where people walk</button><button class="b" data-tog="eye" title="E: the robot's camera, with the people YOLO found (live, with the camera on)">Camera</button></div>
   <div class="row"><button class="b" data-tog="voice" title="The robot speaks its replies">Robot voice</button><button class="b" data-tog="sound" title="Soft chimes when it stops and goes">Sound</button><button class="b" data-tog="legend">Legend</button><button class="b" id="btn-full" title="F">Full screen</button><button class="b" id="btn-cinema" title="H — press H again to bring them back">Hide controls</button><a class="b" href="/" title="Mission Control">2D</a></div>
 </div>
 <div class="hud panel ui" id="legend">
@@ -149,10 +160,11 @@ body.cinema #truthbadge { top: 96px; }
 <div class="hud panel ui" id="replay"><button class="b" id="rp-play">⏸</button><select id="rp-speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select><input type="range" id="rp-slider" min="0" max="100" step="0.5" value="0" aria-label="Replay time"><span id="rp-lbl">—</span></div>
 <div class="hud panel ui" id="talk"><input id="talkin" placeholder="Say or type: clean aisle 2 · why did you stop? · show me your closest call" autocomplete="off"><button id="mic" title="Speak (M)">🎤</button></div>
 <div id="micnote" class="ui"></div>
+<div class="hud" id="camwin" title="The robot's camera: the people YOLO found on the Mac. Click: bigger or smaller. E: hide"><img id="camimg" alt="The robot's camera"><div class="cap">CAMERA · PEOPLE FOUND BY YOLO</div></div>
 <div id="boot"><div><b>ROBOT'S VIEW</b><span id="bootmsg">Loading the 3D view…</span></div></div>
 
 <script type="module">
-// robot_twin.html (v10.12; v10.13 the wet floor; v10.14 Rewind; v10.14b no black squares from the glow): the robot's mind in 3D. Everything drawn here comes from /api/state, which
+// robot_twin.html (v10.12; v10.13 the wet floor; v10.14 Rewind; v10.14b no black squares from the glow; v10.14c the camera window): the robot's mind in 3D. Everything drawn here comes from /api/state, which
 // carries only what the robot itself published (its lidar, its tracks and predictions, its decisions);
 // the simulator's truth is drawn only when 'Simulator truth' is switched on, and is labelled as such.
 const $ = (id) => document.getElementById(id);
@@ -173,7 +185,7 @@ catch (e) {
 }
 
 // ------------------------------------------------------------------ settings
-const T = Object.assign({ ghosts: true, sight: true, truth: false, labels: true, voice: false, sound: false, legend: true, glow: true, wet: true, habits: false }, store.get('toggles', {}));
+const T = Object.assign({ ghosts: true, sight: true, truth: false, labels: true, voice: false, sound: false, legend: true, glow: true, wet: true, habits: false, eye: true }, store.get('toggles', {}));
 const qs = new URLSearchParams(location.search);
 if (qs.has('truth')) T.truth = qs.get('truth') !== '0';
 if (qs.has('glow')) T.glow = qs.get('glow') !== '0';
@@ -907,7 +919,7 @@ function hudRects() {                 // labels never go under the panels or the
   const now = performance.now();
   if (now - HUDBOX.at < 500) return HUDBOX.rects;
   const rects = [];
-  for (const id of ['statebox', 'controls', 'legend', 'stats', 'talk', 'replay', 'brand', 'truthbadge', 'rwbanner']) {
+  for (const id of ['statebox', 'controls', 'legend', 'stats', 'talk', 'replay', 'brand', 'truthbadge', 'rwbanner', 'camwin']) {
     const el = $(id);
     if (!el) continue;
     const b = el.getBoundingClientRect();
@@ -1847,6 +1859,7 @@ function onState(st) {
   setHolds(st.holds);
   setTruth(st);
   camCone.visible = !!st.camera;
+  renderCamWin(st);
   for (const ev of st.events || []) handleEvent(ev, S.first);
   S.seq = st.seq;
   renderHud(st);
@@ -1999,6 +2012,27 @@ async function listenWhisper() {
 }
 $('mic').addEventListener('click', listen);
 
+// v10.14c: the robot's camera in a window (the same picture as the 2D page: /eye/image_annotated, YOLO's boxes drawn on the Mac's
+// answer). It shows only while the server has pictures (live, with the camera on; a replay has none). E or "Camera" hides it.
+const CW = { on: false, timer: null };
+function renderCamWin(st) {
+  const want = !!(st && st.camera) && !!T.eye;
+  if (want === CW.on) return;
+  CW.on = want;
+  $('camwin').classList.toggle('on', want);
+  if (want) camwinTick();
+  else if (CW.timer) { clearTimeout(CW.timer); CW.timer = null; }
+}
+function camwinTick() {
+  CW.timer = null;
+  if (!CW.on) return;
+  const nxt = new Image();
+  nxt.onload = () => { if (CW.on) $('camimg').src = nxt.src; CW.timer = setTimeout(camwinTick, document.hidden ? 2000 : 400); };
+  nxt.onerror = () => { CW.timer = setTimeout(camwinTick, 1500); };
+  nxt.src = `/api/camera.jpg?t=${Date.now()}`;
+}
+$('camwin').addEventListener('click', () => { $('camwin').classList.toggle('big'); HUDBOX.at = -1; });
+
 // ------------------------------------------------------------------ controls
 function applyToggles() {
   document.querySelectorAll('[data-tog]').forEach((b) => b.classList.toggle('on', !!T[b.dataset.tog]));
@@ -2014,6 +2048,7 @@ function toggle(k) {
   if (k === 'sound' && T.sound) tone([660, 880], 0.1, 0.03);
   if (k === 'glow') { speed.slowFor = 0; resize(); }
   applyToggles();
+  if (k === 'eye') renderCamWin(S.st);
   if (S.st) setTruth(S.st);
 }
 document.querySelectorAll('[data-cam]').forEach((b) => b.addEventListener('click', () => setCam(b.dataset.cam)));
@@ -2033,6 +2068,7 @@ addEventListener('keydown', (e) => {
   else if (k === 'b') toggle('glow');
   else if (k === 'w') toggle('wet');
   else if (k === 'p') toggle('habits');
+  else if (k === 'e') toggle('eye');
   else if (k === 'r') rwPlay(e.shiftKey ? 'closest' : 'last');
   else if (e.key === 'Escape' && RWD.on) rwEnd();
   else if (k === 'h') document.body.classList.toggle('cinema');
